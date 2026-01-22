@@ -2,7 +2,7 @@ import torch
 import timm
 from torch import nn
 
-WEIGHTS_PATH = "app/models/skin_classifier.pth"
+WEIGHTS_PATH = "app/models/best_dino_base_518.pth.pth"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

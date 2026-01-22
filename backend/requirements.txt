@@ -5,6 +5,10 @@ pydantic
 pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
-chromadb
 sentence-transformers
 timm
+sqlalchemy 
+asyncpg 
+psycopg2-binary 
+python-dotenv
+greenlet
