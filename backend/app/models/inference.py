@@ -11,7 +11,7 @@ _MODEL = load_model()
 def run_skin_inference(image: Image.Image) -> dict:
     """
     Runs skin disease inference.
-    Returns label + confidence (0–1 float).
+    Returns label + confidence (0-1 float).
     """
     tensor = TEST_TRANSFORM(image).unsqueeze(0)
 

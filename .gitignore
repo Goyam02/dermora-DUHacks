@@ -5,3 +5,4 @@ __pycache__/
 .kiro
 .vscode
 best_dino_base_518.pth
+dataset/
