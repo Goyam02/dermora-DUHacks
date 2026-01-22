@@ -1,2 +1,1 @@
 # dermora-app
-# dermora-app

@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .kiro
 .vscode
+best_dino_base_518.pth
