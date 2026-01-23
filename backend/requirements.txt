@@ -12,3 +12,6 @@ asyncpg
 psycopg2-binary 
 python-dotenv
 greenlet
+aiofiles 
+pillow
+openai
