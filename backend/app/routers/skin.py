@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, delete
 from datetime import datetime, timedelta
 from uuid import UUID
 from PIL import Image
@@ -10,6 +10,7 @@ import uuid as uuid_lib
 from app.core.database import get_db
 from app.entities.skin_image import SkinImage
 from app.entities.skin_diagnosis import SkinDiagnosis
+from app.entities.improvement_record import ImprovementRecord  # ← Add this too
 from app.schemas.skin import (
     SkinImageUploadResponse,
     SkinAnalysisResult,
@@ -19,6 +20,8 @@ from app.schemas.skin import (
 from app.services.storage import StorageService
 from app.services.azure_vision import AzureVisionService
 from app.models.inference import run_skin_inference  # Your existing DINOv2 function
+from app.services.improvement_analyzer import ImprovementAnalyzer
+from app.schemas.skin import ImprovementTrackerResponse
 
 router = APIRouter(prefix="/skin", tags=["Skin Analysis"])
 storage = StorageService()
@@ -50,6 +53,7 @@ async def diagnose_skin(file: UploadFile = File(...)):
         "prediction": result["prediction"],
         "confidence": result["confidence"]
     }
+
 
 
 # ============================================================================
@@ -316,4 +320,53 @@ async def delete_skin_image(
     return {
         "message": "Image deleted successfully",
         "image_id": str(image_id)
+    }
+
+
+improvement_analyzer = ImprovementAnalyzer()
+
+@router.get("/improvement-tracker/{user_id}", response_model=ImprovementTrackerResponse)
+async def get_improvement_tracker(
+    user_id: UUID,
+    weeks: int = 12,  # Track last 12 weeks by default
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get comprehensive improvement tracker with medical advice.
+    
+    - **user_id**: User UUID
+    - **weeks**: Number of weeks to track (default: 12)
+    
+    Returns:
+    - Weekly progress breakdown
+    - Overall improvement metrics
+    - Medical advice based on trends
+    - Best/worst weeks
+    """
+    
+    return await improvement_analyzer.get_improvement_tracker(db, user_id, weeks)
+
+
+@router.post("/improvement-tracker/{user_id}/refresh")
+async def refresh_improvement_data(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Manually refresh improvement records for a user.
+    Useful after uploading multiple images.
+    """
+    
+    # Delete existing records to force recalculation
+    await db.execute(
+        delete(ImprovementRecord).where(ImprovementRecord.user_id == user_id)
+    )
+    await db.commit()
+    
+    # Recalculate
+    tracker_data = await improvement_analyzer.get_improvement_tracker(db, user_id, weeks=12)
+    
+    return {
+        "message": "Improvement data refreshed successfully",
+        "weeks_analyzed": tracker_data.tracking_period["total_weeks"]
     }

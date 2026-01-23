@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, date
 from uuid import UUID
 from typing import Optional, List  
 
@@ -55,3 +55,48 @@ class SkinComparisonResult(BaseModel):
     before_image_id: str
     after_image_id: str
     comparison_date: str
+
+
+class WeeklyProgress(BaseModel):
+    """Single week's progress data"""
+    week_start: date
+    week_end: date
+    primary_condition: str
+    average_severity: Optional[float]
+    average_confidence: float
+    improvement_percentage: Optional[float]
+    severity_trend: str
+    total_images: int
+    initial_image_url: Optional[str]
+    latest_image_url: Optional[str]
+
+class MedicalAdvice(BaseModel):
+    """Medical recommendations based on progress"""
+    advice_text: str
+    needs_doctor_visit: bool
+    urgency_level: str  # 'low', 'medium', 'high'
+    reasoning: str
+
+class ImprovementTrackerResponse(BaseModel):
+    """Complete improvement tracker response"""
+    user_id: str
+    tracking_period: dict  # {start_date, end_date, total_weeks}
+    
+    # Overall metrics
+    overall_improvement: Optional[float]
+    current_condition: str
+    current_severity: Optional[float]
+    trend: str  # 'improving', 'stable', 'worsening'
+    
+    # Weekly breakdown
+    weekly_progress: List[WeeklyProgress]
+    
+    # Medical insights
+    medical_advice: MedicalAdvice
+    
+    # Key milestones
+    best_week: Optional[dict]
+    worst_week: Optional[dict]
+    
+    class Config:
+        from_attributes = True
