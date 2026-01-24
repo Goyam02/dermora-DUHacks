@@ -1,5 +1,3 @@
-// DetectPage.tsx (Updated with pretty outputs and fixed action buttons)
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,7 +20,11 @@ type ActionMode = 'none' | 'reanalyze' | 'compare' | 'delete';
 const DetectPage: React.FC = () => {
     const webcamRef = useRef<Webcam>(null);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
-    const [capturedFile, setCapturedFile] = useState<File | null>(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [result, setResult] = useState<any | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [history, setHistory] = useState<any>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // User images state
     const [userImages, setUserImages] = useState<SkinImage[]>([]);
@@ -83,8 +85,7 @@ const DetectPage: React.FC = () => {
                 .then(res => res.blob())
                 .then(blob => {
                     const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-                    setCapturedFile(file);
-                    handleInitialInference(file);
+                    handleAnalysis(file);
                 });
         }
     }, [webcamRef]);
@@ -95,16 +96,16 @@ const DetectPage: React.FC = () => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImageSrc(reader.result as string);
-                setCapturedFile(file);
-                handleInitialInference(file);
+                handleAnalysis(file);
             };
             reader.readAsDataURL(file);
         }
     };
 
-    const handleInitialInference = async (file: File) => {
-        setStep('inferring');
+    const handleAnalysis = async (file: File) => {
+        setIsAnalyzing(true);
         setError(null);
+        setResult(null);
 
         try {
             const backendResult = await uploadSkinImage(file, USER_ID, 'progress');
@@ -122,13 +123,8 @@ const DetectPage: React.FC = () => {
 
     const reset = () => {
         setImageSrc(null);
-        setCapturedFile(null);
-        setStep('capture');
-        setInitialPrediction(null);
-        setQuestions([]);
-        setAnswers([]);
-        setCurrentQuestionIndex(0);
-        setFinalReport(null);
+        setResult(null);
+        setError(null);
     };
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -537,11 +533,23 @@ const DetectPage: React.FC = () => {
                                     className="w-full h-full object-cover"
                                 />
                                 <div className="absolute bottom-6 w-full flex justify-center gap-6 z-10">
-                                    <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/40">
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="p-4 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/40 transition-all"
+                                    >
                                         <Upload size={24} />
-                                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleFileUpload}
+                                        />
                                     </button>
-                                    <button onClick={capture} className="w-16 h-16 bg-white rounded-full border-4 border-gray-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-all">
+                                    <button
+                                        onClick={capture}
+                                        className="w-16 h-16 bg-white rounded-full border-4 border-gray-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                                    >
                                         <div className="w-14 h-14 bg-red-500 rounded-full border-2 border-white" />
                                     </button>
                                 </div>
@@ -560,115 +568,11 @@ const DetectPage: React.FC = () => {
                                     </div>
                                 )}
 
-                        {/* STATE: IMAGE PREVIEW / PROCESSING */}
-                        {imageSrc && step !== 'capture' && (
-                            <motion.div key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full relative">
-                                <img src={imageSrc} alt="Captured" className="w-full h-full object-cover opacity-50" />
-                                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-
-                                    {/* LOADING STATES */}
-                                    {(step === 'inferring' || step === 'analyzing') && (
-                                        <div className="text-white flex flex-col items-center">
-                                            <RefreshCw className="animate-spin mb-4" size={48} />
-                                            <p className="font-medium text-lg animate-pulse">
-                                                {step === 'inferring' ? "Running Initial Diagnostic..." : "Consulting Advanced AI..."}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {/* REVIEW INITIAL RESULT */}
-                                    {step === 'review' && initialPrediction && (
-                                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 w-full max-w-sm">
-                                            <p className="text-gray-300 text-sm uppercase tracking-wider mb-1">Detected</p>
-                                            <h2 className="text-3xl font-bold text-white mb-2 capitalize">{initialPrediction.prediction}</h2>
-                                            <div className="flex items-center gap-2 mb-6">
-                                                <div className="h-2 flex-1 bg-gray-700 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-green-500" style={{ width: `${initialPrediction.confidence * 100}%` }} />
-                                                </div>
-                                                <span className="text-green-400 font-mono text-sm">{(initialPrediction.confidence * 100).toFixed(0)}%</span>
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                <button onClick={startDeepAnalysis} className="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
-                                                    <MessageCircle size={20} />
-                                                    Run Deep Analysis
-                                                </button>
-                                                <button onClick={reset} className="w-full py-3 bg-transparent text-white border border-white/30 rounded-xl hover:bg-white/10 transition-colors">
-                                                    Retake
-                                                </button>
-                                            </div>
-                                        </motion.div>
-                                    )}
-
-                                    {/* QUESTIONS INTERFACE */}
-                                    {step === 'questions' && questions.length > 0 && (
-                                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-left">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded-md">
-                                                    Question {currentQuestionIndex + 1}/{questions.length}
-                                                </span>
-                                            </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-6 leading-tight">
-                                                {questions[currentQuestionIndex]}
-                                            </h3>
-
-                                            <input
-                                                autoFocus
-                                                value={currentAnswer}
-                                                onChange={(e) => setCurrentAnswer(e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleAnswerSubmit()}
-                                                placeholder="Type your answer..."
-                                                className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black mb-4 text-gray-800"
-                                            />
-
-                                            <button onClick={handleAnswerSubmit} disabled={!currentAnswer.trim()} className="w-full py-4 bg-black text-white rounded-xl font-medium disabled:opacity-50 hover:bg-gray-800 flex items-center justify-center gap-2">
-                                                Next <ArrowRight size={18} />
-                                            </button>
-                                        </motion.div>
-                                    )}
-
-                                    {/* FINAL REPORT */}
-                                    {step === 'final' && finalReport && (
-                                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl text-left h-[90%] overflow-y-auto">
-                                            <div className="flex items-center gap-2 mb-6 text-green-600">
-                                                <CheckCircle size={24} />
-                                                <span className="font-bold">Analysis Complete</span>
-                                            </div>
-
-                                            <h2 className="text-3xl font-display font-bold text-gray-900 mb-2 capitalize">
-                                                {finalReport.final_diagnosis}
-                                            </h2>
-                                            <p className="text-xl text-gray-500 mb-6 font-medium">
-                                                Confidence: {finalReport.confidence_score}%
-                                            </p>
-
-                                            <div className="space-y-6">
-                                                <div className="bg-blue-50 p-5 rounded-2xl">
-                                                    <h4 className="font-bold text-blue-900 mb-2 text-sm uppercase tracking-wide">Analysis</h4>
-                                                    <p className="text-blue-800 leading-relaxed text-sm">
-                                                        {finalReport.explanation}
-                                                    </p>
-                                                </div>
-
-                                                <div className="bg-green-50 p-5 rounded-2xl">
-                                                    <h4 className="font-bold text-green-900 mb-2 text-sm uppercase tracking-wide">Action Plan</h4>
-                                                    <p className="text-green-800 leading-relaxed text-sm">
-                                                        {finalReport.recommendation}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <button onClick={reset} className="w-full mt-8 py-4 bg-black text-white rounded-xl font-medium hover:bg-gray-900">
-                                                Close & Save
-                                            </button>
-                                        </motion.div>
-                                    )}
-
-                                </div>
-
-                                {/* Close Button (only when not analyzing/dialog) */}
-                                {step === 'review' && (
-                                    <button onClick={reset} className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 z-50">
+                                {!isAnalyzing && (
+                                    <button
+                                        onClick={reset}
+                                        className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70"
+                                    >
                                         <X size={20} />
                                     </button>
                                 )}
@@ -969,4 +873,3 @@ const DetectPage: React.FC = () => {
 };
 
 export default DetectPage;
-
