@@ -1,38 +1,14 @@
-import React, { useState } from 'react';
+// MoodPage.tsx (Major update: Fetch questions from backend, step through each dynamically with emoji UI from MoodFaces, map selections to scores (reverse for negative metrics), derive sadness from mood_score, log to backend, remove duration/trigger steps.)
+
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { SadFace, NeutralFace, GoodFace, HappyFace } from './MoodFaces';
 import BottomNav from './BottomNav';
-import { logMood, MoodLogData } from '../services/api';
+import { logMood, getMoodQuestions } from '../services/api';
 import { Check } from 'lucide-react';
 
-// --- Configuration Data ---
-
-const moods = [
-    { id: 'sad', label: 'Terrible', score: 20, component: SadFace, color: 'text-red-600' },
-    { id: 'neutral', label: 'Okay', score: 50, component: NeutralFace, color: 'text-orange-600' },
-    { id: 'good', label: 'Good', score: 75, component: GoodFace, color: 'text-blue-600' },
-    { id: 'happy', label: 'Excellent', score: 95, component: HappyFace, color: 'text-green-600' },
-];
-
-const durations = [
-    { id: 'today', label: 'Just today', icon: '🕒' },
-    { id: 'days', label: 'A few days', icon: '📅' },
-    { id: 'weeks', label: 'Weeks', icon: '🗓️' },
-    { id: 'months', label: 'Months', icon: '📆' },
-];
-
-const triggers = [
-    { id: 'work', label: 'Work / Study', icon: '💼' },
-    { id: 'sleep', label: 'Sleep Quality', icon: '😴' },
-    { id: 'diet', label: 'Food / Diet', icon: '🥗' },
-    { id: 'social', label: 'Relationships', icon: '👥' },
-    { id: 'weather', label: 'Weather', icon: '🌦️' },
-    { id: 'none', label: 'No specific reason', icon: '🤷' },
-];
-
-// --- Components ---
-
+// Components
 const OptionCard = ({ label, icon, isSelected, onClick, delay }: any) => (
     <motion.button
         onClick={onClick}
@@ -65,62 +41,91 @@ const OptionCard = ({ label, icon, isSelected, onClick, delay }: any) => (
 
 const MoodPage: React.FC = () => {
     const navigate = useNavigate();
+    const [questions, setQuestions] = useState<any[]>([]);
+    const [currentStep, setCurrentStep] = useState<number>(0);
+    const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-    const [step, setStep] = useState<'mood' | 'duration' | 'trigger' | 'success'>('mood');
-
-    const [selectedMood, setSelectedMood] = useState<any>(null);
-    const [selectedDuration, setSelectedDuration] = useState<any>(null);
-    const [selectedTrigger, setSelectedTrigger] = useState<any>(null);
-
-    const handleMoodSelect = (mood: any) => {
-        setSelectedMood(mood);
-        setTimeout(() => setStep('duration'), 300);
+    const faceComponents = [SadFace, NeutralFace, GoodFace, HappyFace];
+    const baseScores = [20, 50, 75, 95];
+    const negativeIds = ['stress', 'anxiety'];
+    const labelMap: Record<string, string[]> = {
+        mood: ['Terrible', 'Okay', 'Good', 'Excellent'],
+        stress: ['Very Stressed', 'Stressed', 'Mild', 'Relaxed'],
+        anxiety: ['Very Anxious', 'Anxious', 'Mild', 'Calm'],
+        energy: ['Exhausted', 'Low', 'Good', 'Energized'],
     };
 
-    const handleDurationSelect = (duration: any) => {
-        setSelectedDuration(duration);
-        setTimeout(() => setStep('trigger'), 300);
-    };
-
-    const handleTriggerSelect = async (trigger: any) => {
-        setSelectedTrigger(trigger);
-
-        setTimeout(async () => {
+    useEffect(() => {
+        const fetchQuestions = async () => {
             try {
-                const moodData: MoodLogData = {
-                    mood_score: selectedMood.score,
-                    stress: 50,
-                    anxiety: 50,
-                    energy: 50,
-                    logged_at: new Date().toISOString()
-                };
-                logMood(moodData).catch(e => console.error(e));
-                setStep('success');
-                setTimeout(() => navigate('/solace'), 1500);
-
+                const response = await getMoodQuestions();
+                setQuestions(response.questions);
+                setCurrentStep(0);
             } catch (error) {
-                console.error("Failed", error);
+                console.error('Failed to fetch mood questions:', error);
+                // Fallback to static questions if needed
+                setQuestions([
+                    { id: 'mood', prompt: 'How are you feeling right now?' },
+                    { id: 'stress', prompt: 'How stressed do you feel?' },
+                    { id: 'anxiety', prompt: 'How anxious are you feeling?' },
+                    { id: 'energy', prompt: 'How is your energy level?' },
+                ]);
+                setCurrentStep(0);
             }
+        };
+        fetchQuestions();
+    }, []);
+
+    useEffect(() => {
+        if (currentStep === questions.length && questions.length > 0) {
+            const moodScore = selectedAnswers['mood'];
+            const data = {
+                mood_score: moodScore,
+                stress: selectedAnswers['stress'],
+                anxiety: selectedAnswers['anxiety'],
+                energy: selectedAnswers['energy'],
+                sadness: 100 - moodScore, // Derived from mood_score
+                logged_at: new Date().toISOString(),
+            };
+            logMood(data)
+                .then(() => {
+                    setTimeout(() => navigate('/solace'), 1500);
+                })
+                .catch((error) => console.error('Failed to log mood:', error));
+        }
+    }, [currentStep, questions, selectedAnswers, navigate]);
+
+    const handleSelect = (index: number) => {
+        setSelectedIndex(index);
+        const currentQuestion = questions[currentStep];
+        const isPositive = !negativeIds.includes(currentQuestion.id);
+        const score = isPositive ? baseScores[index] : baseScores[3 - index];
+        setSelectedAnswers((prev) => ({ ...prev, [currentQuestion.id]: score }));
+
+        setTimeout(() => {
+            setSelectedIndex(null);
+            setCurrentStep(currentStep + 1);
         }, 300);
     };
 
     const getHeader = () => {
-        switch (step) {
-            case 'mood': return <>How are you<br />feeling today?</>;
-            case 'duration': return <>How long has this<br />been going on?</>;
-            case 'trigger': return <>Any specific<br />trigger?</>;
-            case 'success': return <>Check-in<br />Complete</>;
+        if (currentStep < questions.length) {
+            return questions[currentStep]?.prompt;
         }
+        return 'Check-in Complete';
     };
 
     const getSubtext = () => {
-        switch (step) {
-            case 'mood': return "Select what best describes your mood.";
-            case 'duration': return "Understanding the timeline helps.";
-            case 'trigger': return "What might have caused this?";
-            case 'success': return "Heading to Solace...";
+        if (currentStep < questions.length) {
+            return 'Select what best describes your current state.';
         }
+        return 'Heading to Solace...';
     };
+
+    if (questions.length === 0) {
+        return <div className="min-h-screen flex items-center justify-center">Loading questions...</div>;
+    }
 
     return (
         <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text pb-24 relative flex flex-col">
@@ -133,7 +138,7 @@ const MoodPage: React.FC = () => {
             <div className="pt-8 px-8 mb-10 text-center relative z-10 min-h-[120px] shrink-0">
                 <AnimatePresence mode="wait">
                     <motion.div
-                        key={step}
+                        key={currentStep}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
@@ -150,56 +155,23 @@ const MoodPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto px-6 max-w-sm mx-auto w-full relative z-10 pb-32 no-scrollbar">
                 <AnimatePresence mode="wait">
 
-                    {/* STEP 1: MOOD */}
-                    {step === 'mood' && (
-                        <motion.div key="mood-list" className="flex flex-col gap-3" exit={{ opacity: 0, x: -20 }}>
-                            {moods.map((mood, index) => (
-                                <OptionCard
-                                    key={mood.id}
-                                    label={mood.label}
-                                    icon={<mood.component />}
-                                    isSelected={selectedMood?.id === mood.id}
-                                    onClick={() => handleMoodSelect(mood)}
-                                    delay={index * 0.05}
-                                />
-                            ))}
+                    {currentStep < questions.length ? (
+                        <motion.div key={currentStep} className="flex flex-col gap-3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                            {faceComponents.map((Face, index) => {
+                                const currentLabels = labelMap[questions[currentStep].id] || ['Bad', 'Neutral', 'Good', 'Great'];
+                                return (
+                                    <OptionCard
+                                        key={index}
+                                        label={currentLabels[index]}
+                                        icon={<Face />}
+                                        isSelected={selectedIndex === index}
+                                        onClick={() => handleSelect(index)}
+                                        delay={index * 0.05}
+                                    />
+                                );
+                            })}
                         </motion.div>
-                    )}
-
-                    {/* STEP 2: DURATION */}
-                    {step === 'duration' && (
-                        <motion.div key="duration-list" className="flex flex-col gap-3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            {durations.map((opt, index) => (
-                                <OptionCard
-                                    key={opt.id}
-                                    label={opt.label}
-                                    icon={opt.icon}
-                                    isSelected={selectedDuration?.id === opt.id}
-                                    onClick={() => handleDurationSelect(opt)}
-                                    delay={index * 0.05}
-                                />
-                            ))}
-                        </motion.div>
-                    )}
-
-                    {/* STEP 3: TRIGGER */}
-                    {step === 'trigger' && (
-                        <motion.div key="trigger-list" className="flex flex-col gap-3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            {triggers.map((opt, index) => (
-                                <OptionCard
-                                    key={opt.id}
-                                    label={opt.label}
-                                    icon={opt.icon}
-                                    isSelected={selectedTrigger?.id === opt.id}
-                                    onClick={() => handleTriggerSelect(opt)}
-                                    delay={index * 0.05}
-                                />
-                            ))}
-                        </motion.div>
-                    )}
-
-                    {/* SUCCESS */}
-                    {step === 'success' && (
+                    ) : (
                         <motion.div
                             key="success"
                             initial={{ opacity: 0, scale: 0.9 }}
@@ -216,13 +188,10 @@ const MoodPage: React.FC = () => {
             </div>
 
             {/* Back Button */}
-            {step !== 'mood' && step !== 'success' && (
+            {currentStep > 0 && currentStep < questions.length && (
                 <div className="fixed bottom-24 left-0 right-0 z-20 flex justify-center pointer-events-none">
                     <button
-                        onClick={() => {
-                            if (step === 'duration') setStep('mood');
-                            if (step === 'trigger') setStep('duration');
-                        }}
+                        onClick={() => setCurrentStep(currentStep - 1)}
                         className="bg-white/80 backdrop-blur-md px-6 py-2 rounded-full text-gray-500 font-medium text-sm hover:text-gray-800 shadow-sm pointer-events-auto"
                     >
                         Go Back
