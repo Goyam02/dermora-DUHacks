@@ -8,15 +8,16 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 IDX2LABEL = {
     0: "eczema",
-    1: "psoriasis",
-    2: "vitiligo"
+    1: "normal",
+    2: "psoriasis",
+    3: "vitiligo"
 }
 
 _MODEL = None
 
 
 class SkinClassifier(nn.Module):
-    def __init__(self, num_classes=3):
+    def __init__(self, num_classes=4):
         super().__init__()
 
         self.backbone = timm.create_model(

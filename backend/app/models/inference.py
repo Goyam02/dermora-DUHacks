@@ -9,14 +9,13 @@ _MODEL = load_model()
 
 
 def run_skin_inference(image: Image.Image) -> dict:
-    """
-    Runs skin disease inference.
-    Returns label + confidence (0-1 float).
-    """
-    tensor = TEST_TRANSFORM(image).unsqueeze(0)
+    model = _MODEL
+    device = next(model.parameters()).device  # safest way
+
+    tensor = TEST_TRANSFORM(image).unsqueeze(0).to(device)
 
     with torch.inference_mode():
-        logits = _MODEL(tensor)
+        logits = model(tensor)
         probs = F.softmax(logits, dim=1)[0]
         conf, idx = probs.max(dim=0)
 
@@ -24,3 +23,4 @@ def run_skin_inference(image: Image.Image) -> dict:
         "prediction": IDX2LABEL[idx.item()],
         "confidence": conf.item()
     }
+
