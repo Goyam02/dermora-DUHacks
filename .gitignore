@@ -6,3 +6,5 @@ __pycache__/
 .vscode
 best_dino_base_518.pth
 dataset/
+best_dino_finetuned.pth
+best_dino_with_normal.pth

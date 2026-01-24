@@ -15,3 +15,8 @@ greenlet
 aiofiles 
 pillow
 openai
+numpy
+scikit-learn
+matplotlib
+seaborn
+tqdm
