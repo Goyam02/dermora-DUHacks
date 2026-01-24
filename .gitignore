@@ -5,3 +5,4 @@ __pycache__/
 .vscode
 best_dino_base_518.pth
 dataset/
+dermora-dinov2-vit-b-skin.pth
