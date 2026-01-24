@@ -1,4 +1,7 @@
-
+import os
+import uuid
+import shutil
+from fastapi import File, UploadFile
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
@@ -6,9 +9,20 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.services.voice_prompt_selector import VoicePromptSelector
+from app.services.mood_inference_service import MoodInferenceService
+from app.utils.llm_client import LLMClient
 
 router = APIRouter(prefix="/voice", tags=["Voice Agent"])
 prompt_selector = VoicePromptSelector()
+
+def _save_temp_audio(file: UploadFile) -> str:
+    suffix = os.path.splitext(file.filename)[-1] or ".wav"
+    path = f"/tmp/{uuid.uuid4()}{suffix}"
+
+    with open(path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return path
 
 
 @router.get("/prompt/{user_id}")
@@ -114,4 +128,98 @@ async def get_mood_categories():
         ],
         "thresholds": VoicePromptSelector.MOOD_THRESHOLDS
     }
+
+@router.post("/mood/analyze")
+async def analyze_voice_mood(
+    user_id: UUID,
+    audio: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Analyze a completed voice conversation and store mood.
+
+    Flow:
+    audio → STT → LLM mood inference → MoodLog
+    """
+
+    if not audio.content_type or not audio.content_type.startswith("audio/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Audio file required.",
+        )
+
+    temp_path = _save_temp_audio(audio)
+
+    try:
+        llm_client = LLMClient()
+        mood_service = MoodInferenceService(llm_client)
+
+        mood_log = await mood_service.process_conversation_audio(
+            db=db,
+            user_id=user_id,
+            audio_path=temp_path,
+        )
+
+        if not mood_log:
+            raise HTTPException(
+                status_code=400,
+                detail="Unable to infer mood from audio.",
+            )
+
+        return {
+            "mood_score": mood_log.mood_score,
+            "stress": mood_log.stress,
+            "anxiety": mood_log.anxiety,
+            "sadness": mood_log.sadness,
+            "energy": mood_log.energy,
+            "logged_at": mood_log.logged_at,
+        }
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+# ============================================================================
+# FRONTEND INTEGRATION EXAMPLE (React Native)
+# ============================================================================
+
+"""
+// 1. Get prompt from backend before starting voice session
+const getVoicePrompt = async (userId) => {
+  const response = await fetch(
+    `${API_URL}/voice/prompt/${userId}`,
+    {
+      headers: { 'Authorization': `Bearer ${clerkToken}` }
+    }
+  );
+  const data = await response.json();
+  return data.system_prompt;
+};
+
+// 2. Initialize Gemini Live API with the prompt
+const startVoiceSession = async (userId) => {
+  const systemPrompt = await getVoicePrompt(userId);
+  
+  const session = await geminiLive.start({
+    model: "gemini-2.0-flash-exp",
+    systemInstruction: systemPrompt,
+    // ... other Gemini config
+  });
+  
+  return session;
+};
+
+// 3. Example usage
+const handleStartTherapy = async () => {
+  setLoading(true);
+  try {
+    const session = await startVoiceSession(user.id);
+    // Voice conversation starts with mood-appropriate prompt
+  } catch (error) {
+    console.error('Failed to start voice session:', error);
+  }
+  setLoading(false);
+};
+"""
+
 
