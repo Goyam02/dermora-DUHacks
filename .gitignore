@@ -1,0 +1,7 @@
+venv/
+.env
+__pycache__/
+*.pyc
+.vscode
+best_dino_base_518.pth
+dataset/
