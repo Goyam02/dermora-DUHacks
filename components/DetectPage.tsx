@@ -1,10 +1,13 @@
+// DetectPage.tsx (Updated to connect all backend routes with separate buttons and input fields for each action. Replaced Gemini with backend upload. Added sections for each route with results display in cards/JSON format. User ID fixed. Image type set to 'progress' for uploads. Display history and comparison results.)
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText, X } from 'lucide-react';
+import { Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText, X, History, ArrowLeftRight, Trash, RotateCcw, Search } from 'lucide-react';
 import BottomNav from './BottomNav';
-import { getImprovementTracker } from '../services/api'; // Still fetch history from backend
-import { analyzeSkinWithGemini } from '../services/gemini'; // New Gemini Vision service
+import { uploadSkinImage, getImprovementTracker, getSkinHistory, analyzeExisting, compareImages, deleteImage, refreshImprovement } from '../services/api'; // Import all API functions
+
+const USER_ID = "00000000-0000-0000-0000-000000000000";
 
 const DetectPage: React.FC = () => {
     const webcamRef = useRef<Webcam>(null);
@@ -13,13 +16,34 @@ const DetectPage: React.FC = () => {
     const [result, setResult] = useState<any | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [history, setHistory] = useState<any>(null);
+    const [comparison, setComparison] = useState<any>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // States for other actions
+    const [analyzeImageId, setAnalyzeImageId] = useState<string>('');
+    const [analyzeResult, setAnalyzeResult] = useState<any>(null);
+    const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+    const [beforeId, setBeforeId] = useState<string>('');
+    const [afterId, setAfterId] = useState<string>('');
+    const [compareResult, setCompareResult] = useState<any>(null);
+    const [compareError, setCompareError] = useState<string | null>(null);
+
+    const [deleteImageId, setDeleteImageId] = useState<string>('');
+    const [deleteResult, setDeleteResult] = useState<any>(null);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+
+    const [refreshResult, setRefreshResult] = useState<any>(null);
+    const [refreshError, setRefreshError] = useState<string | null>(null);
+
+    const [weeks, setWeeks] = useState<number>(4);
+    const [comparisonError, setComparisonError] = useState<string | null>(null);
 
     // Fetch history on mount
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                const data = await getImprovementTracker("b6c7b2b1-87e2-4e0d-9c63-3b8a47a0c7fa");
+                const data = await getImprovementTracker(USER_ID);
                 setHistory(data);
             } catch (err) {
                 console.error("Failed to fetch history", err);
@@ -60,9 +84,9 @@ const DetectPage: React.FC = () => {
         setResult(null);
 
         try {
-            // Use Gemini Vision
-            const geminiResult = await analyzeSkinWithGemini(file);
-            setResult(geminiResult);
+            // Use backend upload and analyze
+            const backendResult = await uploadSkinImage(file, USER_ID, 'progress');
+            setResult(backendResult);
 
         } catch (err) {
             console.error(err);
@@ -72,11 +96,96 @@ const DetectPage: React.FC = () => {
         }
     };
 
+    const handleReAnalyze = async () => {
+        setAnalyzeError(null);
+        setAnalyzeResult(null);
+        try {
+            const res = await analyzeExisting(analyzeImageId);
+            setAnalyzeResult(res);
+        } catch (err) {
+            console.error(err);
+            setAnalyzeError("Failed to re-analyze image.");
+        }
+    };
+
+    const handleCompare = async () => {
+        setCompareError(null);
+        setCompareResult(null);
+        try {
+            const res = await compareImages(beforeId, afterId);
+            setCompareResult(res);
+        } catch (err) {
+            console.error(err);
+            setCompareError("Failed to compare images.");
+        }
+    };
+
+    const handleDelete = async () => {
+        setDeleteError(null);
+        setDeleteResult(null);
+        try {
+            const res = await deleteImage(deleteImageId);
+            setDeleteResult(res);
+        } catch (err) {
+            console.error(err);
+            setDeleteError("Failed to delete image.");
+        }
+    };
+
+    const handleRefresh = async () => {
+        setRefreshError(null);
+        setRefreshResult(null);
+        try {
+            const res = await refreshImprovement(USER_ID);
+            setRefreshResult(res);
+        } catch (err) {
+            console.error(err);
+            setRefreshError("Failed to refresh improvement data.");
+        }
+    };
+
+    const handleGetComparison = async () => {
+        setComparisonError(null);
+        setComparison(null);
+        try {
+            // Assuming getSkinHistory accepts weeks, but if not, remove weeks param
+            const res = await getSkinHistory(USER_ID); // Add weeks if supported: api.get(..., {params: {weeks}})
+            setComparison(res);
+        } catch (err) {
+            console.error(err);
+            setComparisonError("Failed to get comparison.");
+        }
+    };
+
     const reset = () => {
         setImageSrc(null);
         setResult(null);
         setError(null);
     };
+
+    const renderResultCard = (title: string, data: any, err: string | null, icon: React.ReactNode) => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
+        >
+            <div className="flex items-center gap-3 mb-4">
+                {icon}
+                <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+            </div>
+            {err && (
+                <div className="p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-2 border border-red-100">
+                    <AlertCircle size={20} />
+                    <span className="text-sm font-medium">{err}</span>
+                </div>
+            )}
+            {data && (
+                <pre className="text-sm text-gray-600 leading-relaxed mb-4 overflow-auto">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            )}
+        </motion.div>
+    );
 
     return (
         <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text pb-24 relative overflow-x-hidden">
@@ -86,7 +195,7 @@ const DetectPage: React.FC = () => {
 
             <div className="pt-8 px-6 pb-4">
                 <h1 className="font-display text-3xl font-bold text-[#1A1A1A]">Skin Analysis</h1>
-                <p className="text-skin-muted">Powered by Gemini Vision</p>
+                <p className="text-skin-muted">Powered by Azure Vision via Backend</p>
             </div>
 
             <div className="px-6 space-y-6">
@@ -137,7 +246,7 @@ const DetectPage: React.FC = () => {
                                 {isAnalyzing && (
                                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white">
                                         <RefreshCw className="animate-spin mb-2" size={40} />
-                                        <p className="font-medium animate-pulse">Consulting Gemini...</p>
+                                        <p className="font-medium animate-pulse">Uploading and Analyzing...</p>
                                     </div>
                                 )}
 
@@ -154,15 +263,7 @@ const DetectPage: React.FC = () => {
                     </AnimatePresence>
                 </div>
 
-                {/* Local Error */}
-                {error && (
-                    <div className="p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-2 border border-red-100">
-                        <AlertCircle size={20} />
-                        <span className="text-sm font-medium">{error}</span>
-                    </div>
-                )}
-
-                {/* Results Card */}
+                {/* Upload Result */}
                 <AnimatePresence>
                     {result && (
                         <motion.div
@@ -172,7 +273,7 @@ const DetectPage: React.FC = () => {
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <CheckCircle className="text-green-500" size={24} />
-                                <h2 className="text-xl font-bold text-gray-800">Analysis Complete</h2>
+                                <h2 className="text-xl font-bold text-gray-800">Upload & Analysis Complete</h2>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -190,6 +291,10 @@ const DetectPage: React.FC = () => {
                                 {result.message}
                             </p>
 
+                            <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                                Image ID: {result.image_id}
+                            </p>
+
                             <button className="w-full py-3 bg-[#1A1A1A] text-white rounded-xl font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
                                 <FileText size={18} />
                                 View Full Report
@@ -197,6 +302,132 @@ const DetectPage: React.FC = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Error for Upload */}
+                {error && (
+                    <div className="p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-2 border border-red-100">
+                        <AlertCircle size={20} />
+                        <span className="text-sm font-medium">{error}</span>
+                    </div>
+                )}
+
+                {/* Improvement Tracker History */}
+                {history && renderResultCard("Improvement Tracker", history, null, <History className="text-blue-500" size={24} />)}
+
+                {/* Other Actions Section */}
+                <div className="mt-8">
+                    <h2 className="text-2xl font-bold text-[#1A1A1A] mb-4">Other Actions</h2>
+
+                    {/* Re-Analyze Existing Image */}
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Search size={24} className="text-purple-500" />
+                            <h3 className="text-lg font-bold">Re-Analyze Image</h3>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Enter Image ID"
+                            value={analyzeImageId}
+                            onChange={(e) => setAnalyzeImageId(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl mb-3"
+                        />
+                        <button
+                            onClick={handleReAnalyze}
+                            className="w-full py-3 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors"
+                        >
+                            Re-Analyze
+                        </button>
+                        {analyzeResult && renderResultCard("Re-Analyze Result", analyzeResult, analyzeError, <CheckCircle className="text-green-500" size={24} />)}
+                    </div>
+
+                    {/* Compare Two Images */}
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <ArrowLeftRight size={24} className="text-orange-500" />
+                            <h3 className="text-lg font-bold">Compare Images</h3>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Before Image ID"
+                            value={beforeId}
+                            onChange={(e) => setBeforeId(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl mb-3"
+                        />
+                        <input
+                            type="text"
+                            placeholder="After Image ID"
+                            value={afterId}
+                            onChange={(e) => setAfterId(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl mb-3"
+                        />
+                        <button
+                            onClick={handleCompare}
+                            className="w-full py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 transition-colors"
+                        >
+                            Compare
+                        </button>
+                        {compareResult && renderResultCard("Compare Result", compareResult, compareError, <CheckCircle className="text-green-500" size={24} />)}
+                    </div>
+
+                    {/* Get Weekly Comparison */}
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <History size={24} className="text-indigo-500" />
+                            <h3 className="text-lg font-bold">Get Weekly Comparison</h3>
+                        </div>
+                        <input
+                            type="number"
+                            placeholder="Weeks (default 4)"
+                            value={weeks}
+                            onChange={(e) => setWeeks(parseInt(e.target.value) || 4)}
+                            className="w-full p-3 border border-gray-200 rounded-xl mb-3"
+                        />
+                        <button
+                            onClick={handleGetComparison}
+                            className="w-full py-3 bg-indigo-500 text-white rounded-xl font-medium hover:bg-indigo-600 transition-colors"
+                        >
+                            Get Comparison
+                        </button>
+                        {comparison && renderResultCard("Weekly Comparison", comparison, comparisonError, <CheckCircle className="text-green-500" size={24} />)}
+                    </div>
+
+                    {/* Delete Image */}
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Trash size={24} className="text-red-500" />
+                            <h3 className="text-lg font-bold">Delete Image</h3>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Enter Image ID"
+                            value={deleteImageId}
+                            onChange={(e) => setDeleteImageId(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl mb-3"
+                        />
+                        <button
+                            onClick={handleDelete}
+                            className="w-full py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors"
+                        >
+                            Delete
+                        </button>
+                        {deleteResult && renderResultCard("Delete Result", deleteResult, deleteError, <CheckCircle className="text-green-500" size={24} />)}
+                    </div>
+
+                    {/* Refresh Improvement Data */}
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <RotateCcw size={24} className="text-green-500" />
+                            <h3 className="text-lg font-bold">Refresh Improvement Data</h3>
+                        </div>
+                        <button
+                            onClick={handleRefresh}
+                            className="w-full py-3 bg-green-500 text-white rounded-xl font-medium hover:bg-green-600 transition-colors"
+                        >
+                            Refresh
+                        </button>
+                        {refreshResult && renderResultCard("Refresh Result", refreshResult, refreshError, <CheckCircle className="text-green-500" size={24} />)}
+                    </div>
+                </div>
             </div>
 
             <BottomNav />
