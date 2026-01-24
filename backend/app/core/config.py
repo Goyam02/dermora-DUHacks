@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Ignore extra fields from .env (like VITE_ prefixed vars for frontend)
 
 
 settings = Settings()

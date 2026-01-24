@@ -48,9 +48,24 @@ async def get_voice_prompt(
     3. Start voice conversation with returned prompt
     """
     
-    prompt_data = await prompt_selector.get_prompt_for_user(db, user_id)
-    
-    return prompt_data
+    try:
+        prompt_data = await prompt_selector.get_prompt_for_user(db, user_id)
+        return prompt_data
+    except Exception as e:
+        # Fallback to neutral mood if database is unavailable
+        print(f"Database error: {str(e)}, returning fallback prompt")
+        return {
+            "mood_category": "neutral",
+            "mood_score": 65,
+            "prompt_name": "Balanced Check-in (Fallback)",
+            "system_prompt": """You are a compassionate voice AI assistant providing emotional support and wellness guidance. 
+                Keep responses conversational, warm, and supportive.
+                Focus on: active listening, validation, gentle encouragement, and practical wellness tips.
+                If the user seems distressed, suggest professional support resources.""",
+            "suggested_duration": "5-10 minutes",
+            "follow_up_recommended": True,
+            "calculated_at": datetime.now().isoformat()
+        }
 
 
 @router.get("/prompt-preview/{mood_score}")

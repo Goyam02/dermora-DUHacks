@@ -6,13 +6,13 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // Optional: Add fallback / warning in development
 if (!API_KEY) {
-  console.warn(
-    '%c[WARNING] Gemini API key is missing!\n' +
-    'Please add VITE_GEMINI_API_KEY=your-key-here to your .env file',
-    'color: #ff4444; font-weight: bold; font-size: 14px;'
-  );
-  // You can throw an error in production builds if you want:
-  // if (import.meta.env.PROD) throw new Error("Missing Gemini API key");
+    console.warn(
+        '%c[WARNING] Gemini API key is missing!\n' +
+        'Please add VITE_GEMINI_API_KEY=your-key-here to your .env file',
+        'color: #ff4444; font-weight: bold; font-size: 14px;'
+    );
+    // You can throw an error in production builds if you want:
+    // if (import.meta.env.PROD) throw new Error("Missing Gemini API key");
 }
 const genAI = new GoogleGenerativeAI(API_KEY);
 
@@ -83,32 +83,88 @@ async function fileToGenerativePart(file: File): Promise<{ inlineData: { data: s
     });
 }
 
-export const analyzeSkinWithGemini = async (file: File) => {
+// ────────────────────────────────────────────────
+// NEW: Skin Analysis Workflow (Gemini 2.5 Flash)
+// ────────────────────────────────────────────────
+
+// 1. Generate Follow-up Questions based on prediction
+export const generateFollowUpQuestions = async (prediction: string, confidence: number, imageBase64: string): Promise<string[]> => {
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const imagePart = await fileToGenerativePart(file);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
-        Analyze this image of a skin condition. 
-        Provide a JSON response with the following fields: 
-        1. prediction (name of the potential condition or 'Normal')
-        2. confidence (a number between 0 and 1)
-        3. severity_score (0-100)
-        4. message (a brief, empathetic explanation and advice)
+        A skin analysis model predicted: "${prediction}" with ${(confidence * 100).toFixed(1)}% confidence.
         
-        Strictly return ONLY the JSON string. Do not include markdown formatting like \`\`\`json.
+        Based on this potential condition, generate 3-4 simple, relevant follow-up questions 
+        that would help confirm the diagnosis or understand the severity. 
+        Focus on symptoms (itchiness, duration, pain, etc.).
+        
+        Return ONLY a JSON array of strings. Example: ["Does it itch?", "How long have you had it?"]
         `;
 
-        const result = await model.generateContent([prompt, imagePart]);
+        const result = await model.generateContent([
+            prompt,
+            // We can pass the image again for context if needed, but prediction might be enough
+            // For now, let's keep it text-based to save bandwidth, or pass image if critical
+        ]);
+
         const responseText = result.response.text();
         const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         return JSON.parse(cleanText);
 
     } catch (error) {
-        console.error("Gemini Vision Error:", error);
-        throw new Error("Analysis unavailable.");
+        console.error("Gemini Question Gen Error:", error);
+        return [
+            "How long have you had this condition?",
+            "Is it painful or itchy?",
+            "Have you noticed any changes recently?"
+        ];
     }
-}
+};
+
+// 2. Final Analysis with User Answers
+export const generateFinalSkinReport = async (
+    prediction: string,
+    confidence: number,
+    qaPairs: { question: string, answer: string }[]
+) => {
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const qaContext = qaPairs.map(qa => `Q: ${qa.question}\nA: ${qa.answer}`).join('\n');
+
+        const prompt = `
+        Context:
+        - Helper Model Prediction: ${prediction} (${(confidence * 100).toFixed(1)}%)
+        - User Assessment:
+        ${qaContext}
+
+        Task:
+        1. Confirm or refine the detected disease name based on the evidence.
+        2. Provide a 'confidence' score (0-100) based on user answers.
+        3. Explain *why* this is the likely condition.
+        4. Recommend immediate next steps (home care vs doctor visit).
+
+        Return JSON:
+        {
+            "final_diagnosis": "string",
+            "confidence_score": number,
+            "explanation": "string",
+            "recommendation": "string"
+        }
+        `;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanText);
+
+    } catch (error) {
+        console.error("Gemini Final Report Error:", error);
+        throw new Error("Could not generate report");
+    }
+};
+
 function encode(bytes: Uint8Array): string {
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
@@ -320,8 +376,8 @@ export const connectToSolaceLive = async (
                 processor?.disconnect();
                 source?.disconnect();
 
-                try { await inputCtx.close(); } catch {}
-                try { await outputCtx.close(); } catch {}
+                try { await inputCtx.close(); } catch { }
+                try { await outputCtx.close(); } catch { }
             },
 
             getAnalyser: () => analyser,

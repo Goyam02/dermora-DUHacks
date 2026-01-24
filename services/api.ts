@@ -96,8 +96,19 @@ export const getMoodQuestions = async () => {
 // --- Solace / Voice API ---
 
 export const getVoicePrompt = async (userId: string): Promise<VoicePromptData> => {
-    const response = await api.get(`/voice/prompt/${userId}`);
-    return response.data;
+    try {
+        const response = await api.get(`/voice/prompt/${userId}`);
+        return response.data;
+    } catch (error: any) {
+        console.error('Voice prompt fetch failed:', {
+            url: `http://localhost:8000/voice/prompt/${userId}`,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            message: error.message,
+            corsError: error.message.includes('CORS'),
+        });
+        throw error;
+    }
 };
 
 export const uploadVoiceForMoodAnalysis = async (
@@ -113,7 +124,7 @@ export const uploadVoiceForMoodAnalysis = async (
             'Content-Type': 'multipart/form-data',
         },
     });
-    
+
     return response.data;
 };
 
@@ -122,6 +133,36 @@ export const getWeeklyReport = async (userId: string) => {
     const response = await api.get(`/reports/weekly/${userId}`);
     return response.data;
 }
+
+export const analyzeExisting = async (imageId: string) => {
+    const response = await api.post(`/skin/analyze/${imageId}`);
+    return response.data;
+};
+
+export const compareImages = async (beforeId: string, afterId: string) => {
+    const response = await api.post(`/skin/compare`, {}, {
+        params: {
+            before_image_id: beforeId,
+            after_image_id: afterId
+        }
+    });
+    return response.data;
+};
+
+export const deleteImage = async (imageId: string) => {
+    const response = await api.delete(`/skin/image/${imageId}`);
+    return response.data;
+};
+
+export const refreshImprovement = async (userId: string) => {
+    const response = await api.post(`/skin/improvement-tracker/${userId}/refresh`);
+    return response.data;
+};
+
+export const getMySkinImages = async (userId: string = "00000000-0000-0000-0000-000000000000") => {
+    const response = await api.get(`/skin/images/${userId}`);
+    return response.data;
+};
 
 export default api;
 

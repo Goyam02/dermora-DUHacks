@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import auth, skin, mood, voice, analytics, reports
+from app.routers import skin, mood, voice, analytics, reports
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -12,8 +12,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:3001",  # Alternative dev port
         "http://localhost:5173",  # Vite default
+        "http://localhost:8000",  # Backend itself (for testing)
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -21,7 +26,7 @@ app.add_middleware(
 )
 
 
-app.include_router(auth.router)
+
 app.include_router(skin.router)
 app.include_router(mood.router)
 app.include_router(voice.router)

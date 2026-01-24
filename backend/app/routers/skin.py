@@ -100,8 +100,15 @@ async def upload_and_analyze(
         print(f"Azure Vision analysis failed (non-critical): {e}")
     
     # Store image record
+    # generated deterministic UUID from Clerk ID (string)
+    if user_id == "test-user":
+         db_user_uuid = UUID("00000000-0000-0000-0000-000000000000")
+    else:
+         # Create a deterministic UUID from the Clerk ID string
+         db_user_uuid = uuid_lib.uuid5(uuid_lib.NAMESPACE_DNS, str(user_id))
+
     skin_image = SkinImage(
-        user_id=UUID(user_id) if user_id != "test-user" else UUID("00000000-0000-0000-0000-000000000000"),
+        user_id=db_user_uuid,
         image_url=file_path,
         image_type=image_type,
         captured_at=datetime.utcnow()
@@ -370,3 +377,32 @@ async def refresh_improvement_data(
         "message": "Improvement data refreshed successfully",
         "weeks_analyzed": tracker_data.tracking_period["total_weeks"]
     }
+
+
+# ============================================================================
+# ENDPOINT 7: Get all images for a user
+# ============================================================================
+@router.get("/images/{user_id}")
+async def get_user_images(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all skin images for a user.
+    """
+    result = await db.execute(
+        select(SkinImage)
+        .where(SkinImage.user_id == user_id)
+        .order_by(SkinImage.captured_at.desc())
+    )
+    images = result.scalars().all()
+    
+    return [
+        {
+            "image_id": str(img.id),
+            "image_url": img.image_url,
+            "captured_at": img.captured_at.isoformat(),
+            "image_type": img.image_type
+        }
+        for img in images
+    ]

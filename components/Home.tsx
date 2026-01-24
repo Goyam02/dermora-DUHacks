@@ -1,11 +1,13 @@
 import React from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
+import { useUser } from '@clerk/clerk-react';
 import SkinLayersVisual from './SkinLayersVisual';
 import FeatureCard from './FeatureCard';
 import { FaceScanIcon, ActivityIcon, SparklesIcon, BookOpenIcon } from './icons/AppIcons';
 import BottomNav from './BottomNav';
 
 const Home: React.FC = () => {
+    const { user } = useUser();
     const { scrollY } = useScroll();
     const headerOpacity = useTransform(scrollY, [0, 50], [0, 1]);
 
@@ -53,11 +55,17 @@ const Home: React.FC = () => {
             >
                 <div className="flex flex-col">
                     <span className="text-xs font-medium text-skin-muted uppercase tracking-wider">Welcome Back</span>
-                    <span className="font-display font-bold text-lg text-[#1A1A1A]">Juliana K.</span>
+                    <span className="font-display font-bold text-lg text-[#1A1A1A]">
+                        {user?.firstName || user?.fullName || "User"}
+                    </span>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center overflow-hidden">
-                    {/* Profile placeholder */}
-                    <div className="w-full h-full bg-skin-nude/50" />
+                    {/* Profile placeholder or Clerk Image */}
+                    {user?.imageUrl ? (
+                        <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                        <div className="w-full h-full bg-skin-nude/50" />
+                    )}
                 </div>
             </motion.nav>
 

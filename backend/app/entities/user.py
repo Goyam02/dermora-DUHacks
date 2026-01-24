@@ -9,10 +9,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(Text, unique=True, nullable=False)
-    full_name = Column(Text)
-    google_sub = Column(Text, unique=True, nullable=False)
-    profile_picture = Column(Text)
+    email = Column(Text, unique=True, nullable=True)
+    full_name = Column(Text, nullable=True)
+    phone_number = Column(Text, unique=True, nullable=True)
+    google_sub = Column(Text, unique=True, nullable=True)
+    profile_picture = Column(Text, nullable=True)
 
     age = Column(String)
     gender = Column(String)
