@@ -114,7 +114,7 @@ Return JSON only in this exact format:
         # 3. Persist
         mood_log = MoodLog(
             user_id=user_id,
-            mood_score=mood_score,
+            # mood_score=mood_score,
             stress=stress,
             anxiety=anxiety,
             sadness=sadness,

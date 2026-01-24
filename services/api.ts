@@ -58,6 +58,18 @@ export interface MoodAnalysisResponse {
 
 // --- Detect / Skin API ---
 
+export interface UserSkinImage {
+    image_id: string;
+    image_url: string;       // now "/uploads/skin_images/xxx.jpg"
+    captured_at: string;
+    image_type: string;
+}
+
+export const getMySkinImages = async (): Promise<UserSkinImage[]> => {
+    const response = await api.get('/skin/my-images');
+    return response.data;
+};
+
 export const uploadSkinImage = async (file: File, userId: string = "test-user", imageType: string = "weekly"): Promise<SkinImageUploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);

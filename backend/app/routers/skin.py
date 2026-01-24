@@ -4,7 +4,7 @@ from sqlalchemy import select, and_, desc, delete
 from datetime import datetime, timedelta
 from uuid import UUID
 from PIL import Image
-import io
+import io, os
 import uuid as uuid_lib
 
 from app.core.database import get_db
@@ -55,6 +55,30 @@ async def diagnose_skin(file: UploadFile = File(...)):
     }
 
 
+@router.get("/my-images")
+async def get_my_images(
+    db: AsyncSession = Depends(get_db),
+    # user_id: UUID = Depends(get_current_user)  # ← later with auth
+):
+    # For now hardcode your test user
+    user_id = UUID("00000000-0000-0000-0000-000000000000")
+    
+    result = await db.execute(
+        select(SkinImage)
+        .where(SkinImage.user_id == user_id)
+        .order_by(desc(SkinImage.captured_at))
+    )
+    images = result.scalars().all()
+    
+    return [
+        {
+            "image_id": str(img.id),
+            "image_url": f"/uploads/skin_images/{os.path.basename(img.image_url)}",  # make it public URL
+            "captured_at": img.captured_at.isoformat(),
+            "image_type": img.image_type
+        }
+        for img in images
+    ]
 
 # ============================================================================
 # ENDPOINT 2: NEW - Upload with database storage + Azure Vision
