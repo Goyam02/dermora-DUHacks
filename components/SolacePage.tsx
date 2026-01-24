@@ -7,7 +7,7 @@ import { connectToSolaceLive } from '../services/gemini';
 type SessionStatus = 'idle' | 'loading' | 'connected' | 'speaking' | 'processing';
 
 const SolacePage: React.FC = () => {
-    // CHANGE THIS TO YOUR USER ID
+    // CHANGE THIS TO YOUR USER ID - Must be a valid UUID
     const USER_ID = "b6c7b2b1-87e2-4e0d-9c63-3b8a47a0c7fa";
 
     // State
@@ -62,11 +62,11 @@ const SolacePage: React.FC = () => {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         source.connect(ctx.destination);
-        
+
         source.onended = () => {
             processAudioQueue(ctx);
         };
-        
+
         source.start();
     };
 
@@ -119,7 +119,7 @@ const SolacePage: React.FC = () => {
             animationFrameId = requestAnimationFrame(render);
         };
         render();
-        
+
         return () => cancelAnimationFrame(animationFrameId);
     }, [status]);
 
@@ -137,13 +137,13 @@ const SolacePage: React.FC = () => {
         try {
             const session = await connectToSolaceLive(
                 promptData.system_prompt,
-                
+
                 // On audio received
                 (buffer: AudioBuffer) => {
                     const ctx = session.getOutputContext();
                     playAudio(ctx, buffer);
                 },
-                
+
                 // On transcript
                 (text: string, role: 'user' | 'model', isTurnComplete: boolean) => {
                     if (text) {
@@ -156,13 +156,13 @@ const SolacePage: React.FC = () => {
                         setTranscript('');
                     }
                 },
-                
+
                 // On close
                 () => {
                     setStatus('idle');
                     setDebugMsg('Session ended');
                 },
-                
+
                 // On error
                 (errorMsg: string) => {
                     setError(errorMsg);
@@ -193,7 +193,7 @@ const SolacePage: React.FC = () => {
         try {
             // Get recorded audio
             const audioBlob = await sessionRef.current.getRecordedAudio();
-            
+
             // Disconnect session
             await sessionRef.current.disconnect();
             sessionRef.current = null;
@@ -201,10 +201,10 @@ const SolacePage: React.FC = () => {
             // Upload for mood analysis
             setDebugMsg('Uploading conversation for mood analysis...');
             const moodResult = await uploadVoiceForMoodAnalysis(USER_ID, audioBlob);
-            
+
             setDebugMsg(`Session complete! Mood: ${moodResult.mood_score.toFixed(0)}/100`);
             setStatus('idle');
-            
+
             console.log('✅ Mood Analysis Result:', moodResult);
 
         } catch (e: any) {
@@ -255,14 +255,14 @@ const SolacePage: React.FC = () => {
 
             {/* Main Content */}
             <div className="relative z-10 w-full flex flex-col items-center justify-center h-full space-y-8">
-                
+
                 {/* Waveform Visualizer */}
                 <div className="w-full h-64 flex items-center justify-center pointer-events-none">
-                    <canvas 
-                        ref={canvasRef} 
-                        width={400} 
-                        height={256} 
-                        className="w-full max-w-md h-full object-contain" 
+                    <canvas
+                        ref={canvasRef}
+                        width={400}
+                        height={256}
+                        className="w-full max-w-md h-full object-contain"
                     />
                 </div>
 
@@ -283,8 +283,8 @@ const SolacePage: React.FC = () => {
                     disabled={status === 'loading' || !promptData}
                     className={`
                         px-8 py-3 rounded-full font-medium text-white transition-all
-                        ${status === 'idle' 
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600' 
+                        ${status === 'idle'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
                             : 'bg-red-500 hover:bg-red-600'
                         }
                         ${(status === 'loading' || !promptData) && 'opacity-50 cursor-not-allowed'}
