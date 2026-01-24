@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     AZURE_OPENAI_ENDPOINT: str
     AZURE_OPENAI_DEPLOYMENT: str
     AZURE_OPENAI_API_VERSION: str = "2024-06-01"
+    # Azure Speech Configuration
+    AZURE_SPEECH_KEY: str
+    AZURE_SPEECH_REGION: str
+    # Azure Whisper Configuration
+    AZURE_WHISPER_URI: str
+    AZURE_WHISPER_KEY: str
 
     class Config:
         env_file = ".env"

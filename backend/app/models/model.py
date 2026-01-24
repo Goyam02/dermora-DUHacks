@@ -2,7 +2,7 @@ import torch
 import timm
 from torch import nn
 
-WEIGHTS_PATH = "app/models/best_dino_base_518.pth"
+WEIGHTS_PATH = "app/models/dermora-dinov2-vit-b-skin.pth"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
