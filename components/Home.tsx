@@ -1,15 +1,43 @@
 import React from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useUser } from '@clerk/clerk-react';
+import { useUser,useAuth } from '@clerk/clerk-react';
 import SkinLayersVisual from './SkinLayersVisual';
 import FeatureCard from './FeatureCard';
 import { FaceScanIcon, ActivityIcon, SparklesIcon, BookOpenIcon } from './icons/AppIcons';
 import BottomNav from './BottomNav';
+import { useEffect, useRef } from "react";
+
 
 const Home: React.FC = () => {
     const { user } = useUser();
     const { scrollY } = useScroll();
     const headerOpacity = useTransform(scrollY, [0, 50], [0, 1]);
+    const { getToken, isSignedIn } = useAuth();
+    const syncedRef = useRef(false);
+
+    useEffect(() => {
+    if (!isSignedIn || !user || syncedRef.current) return;
+
+    const syncUser = async () => {
+        try {
+        const token = await getToken();
+
+        await fetch("http://localhost:8000/auth/sync-user", {
+            method: "POST",
+            headers: {
+            Authorization: `Bearer ${token}`,
+            },
+        });
+
+        syncedRef.current = true;
+        } catch (err) {
+        console.error("User sync failed:", err);
+        }
+    };
+
+    syncUser();
+    }, [isSignedIn, user, getToken]);
+
 
     // Visuals definitions from previous version
     const AnalyzeVisual = () => (

@@ -12,11 +12,16 @@ class UserBase(BaseModel):
     gender: Optional[str] = None
     primary_skin_issue: Optional[str] = None
 
+
 class UserCreate(UserBase):
-    pass
+    clerk_user_id: str   # REQUIRED, not optional
+    email: EmailStr      # email should NOT be optional on creation
+
 
 class UserGenericResponse(UserBase):
     id: UUID
+    clerk_user_id: str
+    email: EmailStr
     created_at: datetime
 
     class Config:
