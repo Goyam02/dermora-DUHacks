@@ -35,9 +35,20 @@ export interface MoodLogData {
 export interface VoicePromptData {
     mood_category: string;
     mood_score: number;
+    prompt_name: string;
     system_prompt: string;
-    suggested_duration: number;
+    suggested_duration: string;
     follow_up_recommended: boolean;
+    calculated_at: string;
+}
+
+export interface MoodAnalysisResponse {
+    mood_score: number;
+    stress: number;
+    anxiety: number;
+    sadness: number;
+    energy: number;
+    logged_at: string;
 }
 
 // API Service Functions
@@ -48,10 +59,6 @@ export const uploadSkinImage = async (file: File, userId: string = "test-user", 
     const formData = new FormData();
     formData.append('file', file);
 
-    // Note: Backend expects query params for user_id and image_type in the upload endpoint wrapper,
-    // but looking at routers/skin.py line 62, it takes them as query params args to the function.
-    // FastAPI handles this automatically if they are distinct from File/Form.
-    // Let's pass them as params.
     const response = await api.post('/skin/upload', formData, {
         params: {
             user_id: userId,
@@ -65,17 +72,11 @@ export const uploadSkinImage = async (file: File, userId: string = "test-user", 
 };
 
 export const getSkinHistory = async (userId: string) => {
-    // Assuming there's an endpoint list images, but checking routers/skin.py...
-    // It has /progress/{user_id}/comparison
     const response = await api.get(`/skin/progress/${userId}/comparison`);
     return response.data;
 };
 
 export const getImprovementTracker = async (userId: string) => {
-    const response = await api.get(`/skin/api/skin/improvement-tracker/${userId}`); // Double check path
-    // Reading skin.py again, router prefix is /skin. 
-    // endpoint is /improvement-tracker/{user_id}
-    // so url is /skin/improvement-tracker/{user_id}
     return (await api.get(`/skin/improvement-tracker/${userId}`)).data;
 }
 
@@ -99,6 +100,23 @@ export const getVoicePrompt = async (userId: string): Promise<VoicePromptData> =
     return response.data;
 };
 
+export const uploadVoiceForMoodAnalysis = async (
+    userId: string,
+    audioBlob: Blob
+): Promise<MoodAnalysisResponse> => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'conversation.webm');
+
+    const response = await api.post(`/voice/mood/analyze`, formData, {
+        params: { user_id: userId },
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    
+    return response.data;
+};
+
 // --- Reports API ---
 export const getWeeklyReport = async (userId: string) => {
     const response = await api.get(`/reports/weekly/${userId}`);
@@ -106,3 +124,4 @@ export const getWeeklyReport = async (userId: string) => {
 }
 
 export default api;
+
