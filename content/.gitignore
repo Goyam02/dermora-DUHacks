@@ -1,13 +1,3 @@
-venv/
-.env
-__pycache__/
-*.pyc
-.vscode
-best_dino_base_518.pth
-dataset/
-dermora-dinov2-vit-b-skin.pth
-node_modules
-
 # Dependencies
 node_modules/
 .pnp
