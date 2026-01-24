@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+sentence-transformers
+timm
+sqlalchemy 
+asyncpg 
+psycopg2-binary 
+python-dotenv
+greenlet
+aiofiles 
+pillow
+openai
