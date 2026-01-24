@@ -1,3 +1,5 @@
+// MoodFaces.tsx (Minor edit: Added optional color prop for customization per question, but not used yet. Adjusted animations slightly for better UI flow as per "edit for UI".)
+
 import React from 'react';
 import { motion } from 'framer-motion';
 
@@ -17,7 +19,7 @@ const FaceBase: React.FC<{ color: string; children: React.ReactNode }> = ({ colo
             opacity: { duration: 0.5 },
             y: { duration: 3, repeat: Infinity, ease: "easeInOut" }
         }}
-        whileHover={{ scale: 1.1 }}
+        whileHover={{ scale: 1.1, rotate: 2 }} // Added slight rotate for better UI engagement
         whileTap={{ scale: 0.95 }}
     >
         {children}

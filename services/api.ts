@@ -1,3 +1,6 @@
+// api.ts (Updated)
+// Add 'sadness' to MoodLogData interface to match the expected POST body.
+
 import axios from 'axios';
 
 // Create an Axios instance with default configuration
@@ -28,6 +31,7 @@ export interface MoodLogData {
     mood_score: number;
     stress: number;
     anxiety: number;
+    sadness: number; // Added to match the POST body example
     energy: number;
     logged_at: string;
 }
@@ -124,4 +128,3 @@ export const getWeeklyReport = async (userId: string) => {
 }
 
 export default api;
-
