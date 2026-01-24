@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # Azure Whisper Configuration
     AZURE_WHISPER_URI: str
     AZURE_WHISPER_KEY: str
+    # Gemini API Key
+    VITE_GEMINI_API_KEY: str
 
     class Config:
         env_file = ".env"

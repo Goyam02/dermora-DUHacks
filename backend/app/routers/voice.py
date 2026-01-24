@@ -1,6 +1,7 @@
 import os
 import uuid
 import shutil
+import tempfile
 from fastapi import File, UploadFile
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,9 +16,13 @@ from app.utils.llm_client import LLMClient
 router = APIRouter(prefix="/voice", tags=["Voice Agent"])
 prompt_selector = VoicePromptSelector()
 
+
 def _save_temp_audio(file: UploadFile) -> str:
     suffix = os.path.splitext(file.filename)[-1] or ".wav"
-    path = f"/tmp/{uuid.uuid4()}{suffix}"
+    filename = f"{uuid.uuid4()}{suffix}"
+
+    temp_dir = tempfile.gettempdir()  # Windows / Linux / macOS safe
+    path = os.path.join(temp_dir, filename)
 
     with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

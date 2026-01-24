@@ -1,7 +1,9 @@
+import os
 from fastapi import FastAPI
 from app.routers import skin, mood, voice, analytics, reports
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="Dermora Backend",
@@ -16,17 +18,22 @@ app.add_middleware(
         "http://localhost:5173",  # Vite default
         "http://localhost:8000",  # Backend itself (for testing)
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000",
+        "*",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+ 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # → backend/
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads", "skin_images")
 
-
-
+app.mount(
+    "/uploads/skin_images",
+    StaticFiles(directory=UPLOADS_DIR),
+    name="skin_images"
+)
+app.include_router(auth.router)
 app.include_router(skin.router)
 app.include_router(mood.router)
 app.include_router(voice.router)

@@ -36,6 +36,7 @@ Definitions:
 - anxiety: worry, nervous anticipation, fear
 - sadness: low mood, hopelessness, emotional pain
 - energy: motivation, engagement, vitality
+- mood: overall emotional well-being
 
 Text:
 \"\"\"
@@ -64,13 +65,15 @@ Return JSON only in this exact format:
         anxiety: float,
         sadness: float,
         energy: float,
+        mood: float = 0.0,
     ) -> float:
+        # Invert negative emotions
         negative = (
             0.4 * stress +
             0.3 * anxiety +
             0.3 * sadness
         )
-        mood = 100 - negative + 0.5 * energy
+        mood = 100 - negative + 0.5 * energy + 0.2 * mood
         return max(0.0, min(100.0, mood))
 
     async def process_conversation_audio(
@@ -98,22 +101,25 @@ Return JSON only in this exact format:
         anxiety = self._safe_score(llm_response.get("anxiety"))
         sadness = self._safe_score(llm_response.get("sadness"))
         energy = self._safe_score(llm_response.get("energy"))
+        mood = self._safe_score(llm_response.get("mood"))
 
         mood_score = self._compute_mood_score(
             stress=stress,
             anxiety=anxiety,
             sadness=sadness,
             energy=energy,
+            mood=mood
         )
 
         # 3. Persist
         mood_log = MoodLog(
             user_id=user_id,
-            mood_score=mood_score,
+            # mood_score=mood_score,
             stress=stress,
             anxiety=anxiety,
             sadness=sadness,
             energy=energy,
+            mood_score=mood,
             logged_at=datetime.utcnow(),
         )
 
