@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import {
     TrendingUp,
     Calendar,
     RefreshCw,
-    AlertCircle,
     ChevronRight,
     FileText,
     Camera,
@@ -15,29 +14,18 @@ import {
     Trash2
 } from 'lucide-react';
 import {
-    LineChart,
-    Line,
     AreaChart,
     Area,
-    BarChart,
-    Bar,
+    LineChart,
+    Line,
     XAxis,
     YAxis,
     CartesianGrid,
     Tooltip,
-    ResponsiveContainer,
-    Legend
+    ResponsiveContainer
 } from 'recharts';
 import BottomNav from './BottomNav';
-import {
-    getWeeklyReportsList,
-    getWeeklyReportHtml,
-    deleteWeeklyReport,
-    getImprovementTracker,
-    getMoodHistoryChart,
-    getMoodSummary,
-    getDashboard
-} from '../services/api';
+import { useBackendAuth } from '../contexts/AuthContext';
 
 interface Report {
     report_id: string;
@@ -47,20 +35,53 @@ interface Report {
     trend: string;
     generated_at: string;
     has_html: boolean;
-    metrics: {
+    metrics: any;
+}
+
+interface MoodDataPoint {
+    date: string;
+    mood_score: number;
+    stress: number;
+    anxiety: number;
+    energy: number;
+}
+
+interface MoodSummary {
+    period: string;
+    avg_mood: number;
+    avg_stress: number;
+    avg_anxiety: number;
+    avg_energy: number;
+    total_logs: number;
+    mood_trend: string;
+}
+
+interface DashboardStats {
+    streak: {
+        current_streak: number;
+        longest_streak: number;
+        last_check_in: string | null;
+        total_check_ins: number;
+    };
+    recent_activity: {
+        images_this_week: number;
+        moods_this_week: number;
+        days_active: number;
+    };
+    quick_stats: {
+        total_images: number;
+        total_mood_logs: number;
+        avg_mood_this_week: number;
         days_tracked: number;
-        consistent_tracking: boolean;
     };
 }
 
 type TimeRange = '7' | '14' | '30';
 
 const InsightsPage: React.FC = () => {
-    const { user } = useUser();
-    const { getToken, isSignedIn } = useAuth();
-    const syncedRef = useRef(false);
+    const { getToken } = useAuth();
+    const { backendUserId, isLoading: authLoading } = useBackendAuth();
 
-    const [backendUserId, setBackendUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Reports state
@@ -71,35 +92,10 @@ const InsightsPage: React.FC = () => {
 
     // Charts state
     const [timeRange, setTimeRange] = useState<TimeRange>('7');
-    const [moodChartData, setMoodChartData] = useState<any[]>([]);
+    const [moodChartData, setMoodChartData] = useState<MoodDataPoint[]>([]);
     const [improvementData, setImprovementData] = useState<any>(null);
-    const [moodSummary, setMoodSummary] = useState<any>(null);
-    const [dashboardStats, setDashboardStats] = useState<any>(null);
-
-    // Sync user
-    useEffect(() => {
-        if (!isSignedIn || !user || syncedRef.current) return;
-
-        const syncUser = async () => {
-            try {
-                const token = await getToken();
-                const response = await fetch("http://localhost:8000/auth/sync-user", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-
-                const data = await response.json();
-                if (data.uuid) {
-                    setBackendUserId(data.uuid);
-                }
-                syncedRef.current = true;
-            } catch (err) {
-                console.error("User sync failed:", err);
-            }
-        };
-
-        syncUser();
-    }, [isSignedIn, user, getToken]);
+    const [moodSummary, setMoodSummary] = useState<MoodSummary | null>(null);
+    const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
     // Fetch all data
     useEffect(() => {
@@ -110,19 +106,83 @@ const InsightsPage: React.FC = () => {
                 setLoading(true);
                 const token = await getToken();
 
-                const [reportsData, moodChart, improvement, summary, dashboard] = await Promise.all([
-                    getWeeklyReportsList(10, token, backendUserId).catch(() => ({ reports: [] })),
-                    getMoodHistoryChart(parseInt(timeRange), token, backendUserId).catch(() => []),
-                    getImprovementTracker(token, backendUserId).catch(() => null),
-                    getMoodSummary(token, backendUserId).catch(() => null),
-                    getDashboard(token, backendUserId).catch(() => null)
-                ]);
+                // Fetch dashboard stats
+                const dashboardResponse = await fetch('http://localhost:8000/engagement/dashboard', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                if (dashboardResponse.ok) {
+                    const dashboard = await dashboardResponse.json();
+                    setDashboardStats(dashboard);
+                    console.log('Dashboard stats:', dashboard);
+                }
 
-                setReports(reportsData.reports || []);
-                setMoodChartData(moodChart);
-                setImprovementData(improvement);
-                setMoodSummary(summary);
-                setDashboardStats(dashboard);
+                // Fetch mood history chart
+                const moodHistoryResponse = await fetch(
+                    `http://localhost:8000/engagement/mood/history?days=${timeRange}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'X-User-Id': backendUserId
+                        }
+                    }
+                );
+                
+                if (moodHistoryResponse.ok) {
+                    const moodHistoryData = await moodHistoryResponse.json();
+                    setMoodChartData(moodHistoryData.mood_data || []);
+                    console.log('Mood history:', moodHistoryData);
+                }
+
+                // Fetch mood summary
+                const moodSummaryResponse = await fetch('http://localhost:8000/engagement/mood/summary', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                if (moodSummaryResponse.ok) {
+                    const summary = await moodSummaryResponse.json();
+                    setMoodSummary(summary);
+                    console.log('Mood summary:', summary);
+                }
+
+                // Fetch improvement tracker data (skin progress)
+                const improvementResponse = await fetch('http://localhost:8000/skin/improvement-tracker', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                if (improvementResponse.ok) {
+                    const improvement = await improvementResponse.json();
+                    setImprovementData(improvement);
+                    console.log('Improvement data:', improvement);
+                } else {
+                    console.error('Failed to fetch improvement data:', improvementResponse.status);
+                }
+
+                // Fetch weekly reports - FIX: use correct endpoint
+                const reportsResponse = await fetch('http://localhost:8000/reports/weekly/list?limit=10', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                if (reportsResponse.ok) {
+                    const reportsData = await reportsResponse.json();
+                    setReports(reportsData.reports || []);
+                    console.log('Reports:', reportsData);
+                } else {
+                    console.error('Failed to fetch reports:', reportsResponse.status);
+                    setReports([]);
+                }
 
             } catch (err) {
                 console.error("Failed to fetch insights:", err);
@@ -137,17 +197,31 @@ const InsightsPage: React.FC = () => {
         }
     }, [backendUserId, getToken, timeRange]);
 
-    // View report
+    // View report - FIX: use correct endpoint
     const handleViewReport = async (weekStart: string) => {
         if (!backendUserId) return;
 
         try {
             const token = await getToken();
-            const html = await getWeeklyReportHtml(token, backendUserId);
-            setReportHtml(html);
-            setSelectedReport(weekStart);
+            // Correct endpoint: /reports/weekly/html with week_start query param
+            const response = await fetch(`http://localhost:8000/reports/weekly/html?week_start=${weekStart}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Id': backendUserId
+                }
+            });
+            
+            if (response.ok) {
+                const htmlContent = await response.text();
+                setReportHtml(htmlContent);
+                setSelectedReport(weekStart);
+            } else {
+                console.error('Failed to fetch report HTML:', response.status);
+                setReportHtml('<p>Failed to load report</p>');
+            }
         } catch (err) {
             console.error("Failed to fetch report:", err);
+            setReportHtml('<p>Error loading report</p>');
         }
     };
 
@@ -158,8 +232,17 @@ const InsightsPage: React.FC = () => {
 
         try {
             const token = await getToken();
-            await deleteWeeklyReport(reportId, token, backendUserId);
-            setReports(reports.filter(r => r.report_id !== reportId));
+            const response = await fetch(`http://localhost:8000/reports/weekly/${reportId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Id': backendUserId
+                }
+            });
+            
+            if (response.ok) {
+                setReports(reports.filter(r => r.report_id !== reportId));
+            }
         } catch (err) {
             console.error("Failed to delete report:", err);
         }
@@ -176,8 +259,7 @@ const InsightsPage: React.FC = () => {
         return '➡️';
     };
 
-    // Loading screen
-    if (!backendUserId || loading) {
+    if (authLoading || loading) {
         return (
             <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
                 <div className="text-center">
@@ -223,7 +305,7 @@ const InsightsPage: React.FC = () => {
                             <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-2xl p-4 border border-pink-200">
                                 <Camera size={20} className="text-pink-600 mb-2" />
                                 <div className="text-2xl font-bold text-[#1A1A1A]">
-                                    {dashboardStats.quick_stats?.images_this_week || 0}
+                                    {dashboardStats.recent_activity?.images_this_week || 0}
                                 </div>
                                 <div className="text-xs text-gray-600 mt-1">Images This Week</div>
                             </div>
@@ -231,7 +313,7 @@ const InsightsPage: React.FC = () => {
                             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 border border-blue-200">
                                 <Activity size={20} className="text-blue-600 mb-2" />
                                 <div className="text-2xl font-bold text-[#1A1A1A]">
-                                    {dashboardStats.quick_stats?.mood_avg_this_week?.toFixed(1) || '—'}
+                                    {dashboardStats.quick_stats?.avg_mood_this_week?.toFixed(1) || '—'}
                                 </div>
                                 <div className="text-xs text-gray-600 mt-1">Avg Mood</div>
                             </div>
@@ -239,20 +321,18 @@ const InsightsPage: React.FC = () => {
                             <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 border border-purple-200">
                                 <Calendar size={20} className="text-purple-600 mb-2" />
                                 <div className="text-2xl font-bold text-[#1A1A1A]">
-                                    {dashboardStats.quick_stats?.days_active_this_month || 0}
+                                    {dashboardStats.recent_activity?.days_active || 0}
                                 </div>
                                 <div className="text-xs text-gray-600 mt-1">Active Days</div>
                             </div>
 
-                            {improvementData && (
-                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 border border-green-200">
-                                    <TrendingUp size={20} className="text-green-600 mb-2" />
-                                    <div className="text-2xl font-bold text-[#1A1A1A]">
-                                        {improvementData.overall_improvement_percentage?.toFixed(0) || '0'}%
-                                    </div>
-                                    <div className="text-xs text-gray-600 mt-1">Improvement</div>
+                            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 border border-green-200">
+                                <TrendingUp size={20} className="text-green-600 mb-2" />
+                                <div className="text-2xl font-bold text-[#1A1A1A]">
+                                    {improvementData?.overall_improvement_percentage?.toFixed(0) || '0'}%
                                 </div>
-                            )}
+                                <div className="text-xs text-gray-600 mt-1">Improvement</div>
+                            </div>
                         </div>
                     </motion.div>
                 )}
@@ -361,7 +441,7 @@ const InsightsPage: React.FC = () => {
                 )}
 
                 {/* Skin Improvement Chart */}
-                {improvementData && improvementData.weekly_data && improvementData.weekly_data.length > 0 && (
+                {improvementData && improvementData.weekly_improvements && improvementData.weekly_improvements.length > 0 && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -372,43 +452,38 @@ const InsightsPage: React.FC = () => {
                             Skin Progress
                         </h2>
 
-                        <ResponsiveContainer width="100%" height={200}>
-                            <LineChart data={improvementData.weekly_data}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis
-                                    dataKey="week_start"
-                                    stroke="#999"
-                                    fontSize={11}
-                                    tickFormatter={(value) => formatDate(value)}
-                                />
-                                <YAxis stroke="#999" fontSize={11} domain={[0, 100]} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                        borderRadius: '12px',
-                                        border: '1px solid #e5e7eb',
-                                        fontSize: '12px'
-                                    }}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="improvement_score"
-                                    stroke="#66BB6A"
-                                    strokeWidth={3}
-                                    dot={{ fill: '#66BB6A', r: 4 }}
-                                    activeDot={{ r: 6 }}
-                                    name="Improvement %"
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        <div className="space-y-3 mb-4">
+                            {improvementData.weekly_improvements.map((week: any, idx: number) => {
+                                const getTrendColor = (trend: string) => {
+                                    if (trend === 'improving') return 'bg-green-50 border-green-200 text-green-700';
+                                    if (trend === 'worsening') return 'bg-red-50 border-red-200 text-red-700';
+                                    return 'bg-gray-50 border-gray-200 text-gray-700';
+                                };
 
-                        <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-                            <div className="text-xs text-gray-500">Overall Improvement</div>
-                            <div className="text-2xl font-bold text-green-600">
-                                {improvementData.overall_improvement_percentage?.toFixed(1) || 0}%
+                                return (
+                                    <div key={idx} className={`p-4 rounded-xl border ${getTrendColor(week.trend)}`}>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="font-semibold">Week {week.week_number}</span>
+                                            <span className="text-sm font-medium capitalize">{week.trend}</span>
+                                        </div>
+                                        <p className="text-sm">{week.summary}</p>
+                                        {week.confidence_change && (
+                                            <p className="text-xs mt-2">
+                                                Confidence change: {(week.confidence_change * 100).toFixed(1)}%
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100 text-center">
+                            <div className="text-xs text-gray-500">Overall Trend</div>
+                            <div className="text-2xl font-bold text-gray-800 capitalize">
+                                {improvementData.overall_trend || 'Stable'}
                             </div>
                             <p className="text-xs text-gray-500 mt-1">
-                                Based on {improvementData.weekly_data.length} weeks of tracking
+                                Based on {improvementData.total_images || 0} images
                             </p>
                         </div>
                     </motion.div>
@@ -465,8 +540,12 @@ const InsightsPage: React.FC = () => {
                                                     <TrendingUp size={12} />
                                                     {report.trend}
                                                 </span>
-                                                <span>•</span>
-                                                <span>{report.metrics.days_tracked} days</span>
+                                                {report.metrics?.days_tracked && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span>{report.metrics.days_tracked} days</span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex flex-col gap-2 ml-2">
@@ -536,4 +615,4 @@ const InsightsPage: React.FC = () => {
     );
 };
 
-export default InsightsPage;
+export default InsightsPage

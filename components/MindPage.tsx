@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import { 
     RefreshCw, 
     ChevronRight, 
@@ -10,6 +10,7 @@ import {
     ChevronLeft
 } from 'lucide-react';
 import BottomNav from './BottomNav';
+import { useBackendAuth } from '../contexts/AuthContext';
 import { 
     logMood, 
     getMoodQuestions,
@@ -26,10 +27,10 @@ type SessionStatus = 'idle' | 'loading' | 'connected' | 'speaking' | 'processing
 type ViewMode = 'hub' | 'mood' | 'voice';
 
 const MindPage: React.FC = () => {
-    const { getToken, isSignedIn } = useAuth();
-    const { user } = useUser();
-    const [backendUserId, setBackendUserId] = useState<string | null>(null);
-    const syncedRef = useRef(false);
+    const { getToken } = useAuth();
+    
+    // ✅ NEW: Use global auth context - no more syncing!
+    const { backendUserId, isLoading: authLoading } = useBackendAuth();
 
     // View state
     const [viewMode, setViewMode] = useState<ViewMode>('hub');
@@ -63,31 +64,6 @@ const MindPage: React.FC = () => {
         anxiety: ['Very Anxious', 'Anxious', 'Mild', 'Calm'],
         energy: ['Exhausted', 'Low', 'Good', 'Energized'],
     };
-
-    // Sync user
-    useEffect(() => {
-        if (!isSignedIn || !user || syncedRef.current) return;
-
-        const syncUser = async () => {
-            try {
-                const token = await getToken();
-                const response = await fetch("http://localhost:8000/auth/sync-user", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                
-                const data = await response.json();
-                if (data.uuid) {
-                    setBackendUserId(data.uuid);
-                }
-                syncedRef.current = true;
-            } catch (err) {
-                console.error("User sync failed:", err);
-            }
-        };
-
-        syncUser();
-    }, [isSignedIn, user, getToken]);
 
     // Fetch initial data when backendUserId is available
     useEffect(() => {
@@ -326,8 +302,8 @@ const MindPage: React.FC = () => {
         }
     };
 
-    // Loading screen
-    if (!backendUserId) {
+    // ✅ NEW: Simpler loading check
+    if (authLoading) {
         return (
             <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
                 <div className="text-center">

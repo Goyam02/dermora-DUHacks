@@ -7,7 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Home from './components/Home';
 import DetectPage from './components/DetectPage';
 import MindPage from './components/MindPage';
-import InsightsPage from './components/InsightsPage';
+import InsightsPage from './components/InsightsPage' ;
 import SignUpPage from './components/SignUpPage';
 
 // Clerk Publishable Key
