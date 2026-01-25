@@ -20,9 +20,6 @@ scikit-learn
 matplotlib
 seaborn
 tqdm
-
-fastapi
-uvicorn[standard]
 python-multipart
 pydantic
 pydantic-settings
@@ -38,3 +35,6 @@ greenlet
 aiofiles 
 pillow
 openai
+pytest
+pytest-asyncio 
+httpx

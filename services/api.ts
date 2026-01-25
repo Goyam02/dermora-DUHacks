@@ -60,7 +60,7 @@ export interface SkinImageUploadResponse {
 
 export interface UserSkinImage {
     image_id: string;
-    image_url: string;       // e.g. "/uploads/skin_images/xxx.jpg"
+    image_url: string;
     captured_at: string;
     image_type: string;
 }
@@ -105,6 +105,61 @@ export interface MoodAnalysisResponse {
     sadness: number;
     energy: number;
     logged_at: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Engagement Types (NEW)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface StreakData {
+    current_streak: number;
+    longest_streak: number;
+    last_check_in: string | null;
+    can_check_in_today: boolean;
+}
+
+export interface DashboardData {
+    streak: StreakData;
+    quick_stats: {
+        images_this_week: number;
+        mood_avg_this_week: number | null;
+        days_active_this_month: number;
+    };
+    recent_activity: Array<{
+        type: 'skin' | 'mood' | 'voice';
+        description: string;
+        timestamp: string;
+    }>;
+}
+
+export interface DailyInsight {
+    message: string;
+    insight_type: string;
+    generated_at: string;
+}
+
+export interface MoodChartData {
+    date: string;
+    mood_score: number;
+    stress: number;
+    anxiety: number;
+    energy: number;
+}
+
+export interface MoodSummary {
+    total_logs: number;
+    avg_mood: number | null;
+    avg_stress: number | null;
+    avg_anxiety: number | null;
+    avg_energy: number | null;
+    period_days: number;
+}
+
+export interface UserPreferences {
+    notification_time: string | null;
+    daily_reminder: boolean;
+    weekly_report: boolean;
+    voice_prompt_frequency: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -267,6 +322,60 @@ export const getWeeklyReportsList = async (limit: number = 10, token?: string, u
 export const deleteWeeklyReport = async (reportId: string, token?: string, userId?: string) => {
     const apiInstance = createApi(token, userId);
     const response = await apiInstance.delete(`/reports/weekly/${reportId}`);
+    return response.data;
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Engagement API (NEW - requires X-User-Id header)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const getStreak = async (token?: string, userId?: string): Promise<StreakData> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/streak');
+    return response.data;
+};
+
+export const dailyCheckIn = async (token?: string, userId?: string) => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.post('/engagement/check-in');
+    return response.data;
+};
+
+export const getDashboard = async (token?: string, userId?: string): Promise<DashboardData> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/dashboard');
+    return response.data;
+};
+
+export const getDailyInsight = async (token?: string, userId?: string): Promise<DailyInsight> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/insights/daily');
+    return response.data;
+};
+
+export const getMoodHistoryChart = async (days: number = 7, token?: string, userId?: string): Promise<MoodChartData[]> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/mood/history', {
+        params: { days },
+    });
+    return response.data;
+};
+
+export const getMoodSummary = async (token?: string, userId?: string): Promise<MoodSummary> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/mood/summary');
+    return response.data;
+};
+
+export const getPreferences = async (token?: string, userId?: string): Promise<UserPreferences> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.get('/engagement/preferences');
+    return response.data;
+};
+
+export const updatePreferences = async (prefs: Partial<UserPreferences>, token?: string, userId?: string): Promise<UserPreferences> => {
+    const apiInstance = createApi(token, userId);
+    const response = await apiInstance.put('/engagement/preferences', prefs);
     return response.data;
 };
 
