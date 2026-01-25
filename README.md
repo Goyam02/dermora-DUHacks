@@ -749,18 +749,6 @@ SOFTWARE.
 
 ---
 
-## Contact and Support
-
-**Development Team:** EVOLVE AI
-
-**Email:** support@dermora.ai
-
-**Project Repository:** [github.com/Divy13ansh/dermora-app](https://github.com/Divy13ansh/dermora-app)
-
-For bug reports, feature requests, or technical support, please open an issue on the GitHub repository.
-
----
-
 <div align="center">
 
 ### Dermora.ai
