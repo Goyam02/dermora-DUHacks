@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@clerk/clerk-react';
@@ -16,8 +18,6 @@ import {
 import {
     AreaChart,
     Area,
-    LineChart,
-    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -26,6 +26,157 @@ import {
 } from 'recharts';
 import BottomNav from './BottomNav';
 import { useBackendAuth } from '../contexts/AuthContext';
+
+interface SkeletonPulseProps extends React.HTMLAttributes<HTMLDivElement> {
+    className?: string;
+}
+
+const SkeletonPulse: React.FC<SkeletonPulseProps> = ({
+    className = '',
+    style,
+    ...rest
+}) => (
+    <div
+        {...rest}
+        className={`relative overflow-hidden bg-gray-200 rounded ${className}`}
+        style={{
+            background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 1.5s ease-in-out infinite',
+            ...style, // ✅ allow height override
+        }}
+    />
+);
+
+
+// Insights Page Skeleton Component
+const InsightsSkeleton: React.FC = () => (
+    <div className="min-h-screen w-full bg-[#FFF5F5] font-sans overflow-x-hidden pb-24">
+        {/* Shimmer Animation Styles */}
+        <style>{`
+            @keyframes shimmer {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+        `}</style>
+
+        {/* Header Skeleton */}
+        <nav className="sticky top-0 z-40 px-5 py-4 bg-[#FFF5F5]/95 backdrop-blur-md border-b border-gray-100">
+            <div className="flex justify-between items-center max-w-md mx-auto">
+                <div>
+                    <SkeletonPulse className="h-7 w-24 rounded-lg mb-1" />
+                    <SkeletonPulse className="h-3 w-36 rounded" />
+                </div>
+                <SkeletonPulse className="w-12 h-12 rounded-full" />
+            </div>
+        </nav>
+
+        <div className="px-5 py-6 max-w-md mx-auto space-y-6">
+            {/* Quick Stats Section Skeleton */}
+            <div>
+                <SkeletonPulse className="h-4 w-24 rounded mb-3" />
+                <div className="grid grid-cols-2 gap-3">
+                    {[...Array(4)].map((_, i) => (
+                        <div key={i} className="bg-white/60 rounded-2xl p-4 border border-gray-100">
+                            <SkeletonPulse className="w-5 h-5 rounded mb-2" />
+                            <SkeletonPulse className="h-8 w-12 rounded mb-1" />
+                            <SkeletonPulse className="h-3 w-20 rounded" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Mood Trends Chart Skeleton */}
+            <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                    <SkeletonPulse className="h-4 w-28 rounded" />
+                    <div className="flex gap-2">
+                        <SkeletonPulse className="h-6 w-10 rounded-full" />
+                        <SkeletonPulse className="h-6 w-10 rounded-full" />
+                        <SkeletonPulse className="h-6 w-10 rounded-full" />
+                    </div>
+                </div>
+                {/* Chart Area Skeleton */}
+                <div className="h-[200px] flex items-end justify-between gap-2 px-2">
+                    {[80, 120, 60, 140, 90, 110, 70].map((height, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                            <SkeletonPulse 
+                                className="w-full rounded-t" 
+                                style={{ height: `${height}px` }} 
+                            />
+                            <SkeletonPulse className="h-3 w-8 rounded" />
+                        </div>
+                    ))}
+                </div>
+                {/* Summary Stats Skeleton */}
+                <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-3 text-center">
+                    {[...Array(3)].map((_, i) => (
+                        <div key={i}>
+                            <SkeletonPulse className="h-3 w-16 rounded mx-auto mb-1" />
+                            <SkeletonPulse className="h-6 w-10 rounded mx-auto" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Skin Progress Skeleton */}
+            <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100">
+                <SkeletonPulse className="h-4 w-28 rounded mb-4" />
+                <div className="space-y-3 mb-4">
+                    {[...Array(2)].map((_, i) => (
+                        <div key={i} className="p-4 rounded-xl border border-gray-200 bg-gray-50">
+                            <div className="flex items-center justify-between mb-2">
+                                <SkeletonPulse className="h-5 w-16 rounded" />
+                                <SkeletonPulse className="h-4 w-20 rounded" />
+                            </div>
+                            <SkeletonPulse className="h-4 w-full rounded mb-1" />
+                            <SkeletonPulse className="h-4 w-3/4 rounded" />
+                        </div>
+                    ))}
+                </div>
+                <div className="pt-4 border-t border-gray-100 text-center">
+                    <SkeletonPulse className="h-3 w-24 rounded mx-auto mb-1" />
+                    <SkeletonPulse className="h-8 w-20 rounded mx-auto mb-1" />
+                    <SkeletonPulse className="h-3 w-28 rounded mx-auto" />
+                </div>
+            </div>
+
+            {/* Weekly Reports Section Skeleton */}
+            <div>
+                <div className="flex items-center justify-between mb-3">
+                    <SkeletonPulse className="h-4 w-28 rounded" />
+                    <SkeletonPulse className="h-5 w-5 rounded" />
+                </div>
+                <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                        <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <SkeletonPulse className="h-3 w-32 rounded" />
+                                        <SkeletonPulse className="h-5 w-5 rounded" />
+                                    </div>
+                                    <SkeletonPulse className="h-4 w-full rounded mb-1" />
+                                    <SkeletonPulse className="h-4 w-2/3 rounded mb-2" />
+                                    <div className="flex items-center gap-3">
+                                        <SkeletonPulse className="h-3 w-20 rounded" />
+                                        <SkeletonPulse className="h-3 w-16 rounded" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2 ml-2">
+                                    <SkeletonPulse className="w-8 h-8 rounded-full" />
+                                    <SkeletonPulse className="w-5 h-5 rounded" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+
+        <BottomNav />
+    </div>
+);
 
 interface Report {
     report_id: string;
@@ -259,15 +410,9 @@ const InsightsPage: React.FC = () => {
         return '➡️';
     };
 
+    // Show skeleton while loading instead of spinner
     if (authLoading || loading) {
-        return (
-            <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
-                <div className="text-center">
-                    <RefreshCw className="animate-spin mx-auto mb-4 text-pastel-pink" size={40} />
-                    <p className="text-sm text-gray-500">Loading insights...</p>
-                </div>
-            </div>
-        );
+        return <InsightsSkeleton />;
     }
 
     return (
@@ -615,4 +760,4 @@ const InsightsPage: React.FC = () => {
     );
 };
 
-export default InsightsPage
+export default InsightsPage;

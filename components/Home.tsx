@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@clerk/clerk-react';
@@ -10,7 +12,6 @@ import {
     TrendingUp,
     Activity,
     Calendar,
-    RefreshCw,
     ChevronRight
 } from 'lucide-react';
 import BottomNav from './BottomNav';
@@ -61,6 +62,120 @@ interface CheckInResponse {
     streak_maintained: boolean;
     message: string;
 }
+
+// Skeleton Pulse Component
+const SkeletonPulse: React.FC<{ className?: string }> = ({ className = '' }) => (
+    <div className={`animate-pulse bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-shimmer rounded ${className}`} />
+);
+
+// Skeleton Loading Component that mirrors the actual dashboard structure
+const DashboardSkeleton: React.FC = () => {
+    return (
+        <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text overflow-x-hidden pb-24">
+            {/* Header Skeleton */}
+            <nav className="sticky top-0 z-40 px-5 py-4 bg-[#FFF5F5]/95 backdrop-blur-md border-b border-gray-100">
+                <div className="flex justify-between items-center max-w-md mx-auto">
+                    <div className="flex flex-col gap-2">
+                        <SkeletonPulse className="h-3 w-20" />
+                        <SkeletonPulse className="h-6 w-32" />
+                    </div>
+                    <SkeletonPulse className="w-12 h-12 rounded-full" />
+                </div>
+            </nav>
+
+            <div className="px-5 py-6 max-w-md mx-auto space-y-4">
+                {/* Streak Card Skeleton */}
+                <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-3xl p-6 shadow-lg border border-orange-100">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                                <SkeletonPulse className="w-7 h-7 rounded-full" />
+                                <SkeletonPulse className="h-10 w-16" />
+                            </div>
+                            <SkeletonPulse className="h-4 w-24 mt-2" />
+                        </div>
+                        <SkeletonPulse className="h-10 w-24 rounded-full" />
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <SkeletonPulse className="h-3 w-28" />
+                        <SkeletonPulse className="h-3 w-32" />
+                    </div>
+                </div>
+
+                {/* Daily Insight Skeleton */}
+                <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100">
+                    <div className="flex items-start gap-3">
+                        <SkeletonPulse className="w-10 h-10 rounded-full flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                            <SkeletonPulse className="h-3 w-24" />
+                            <SkeletonPulse className="h-4 w-full" />
+                            <SkeletonPulse className="h-4 w-3/4" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Quick Stats Skeleton */}
+                <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col items-center">
+                            <SkeletonPulse className="w-6 h-6 rounded mb-2" />
+                            <SkeletonPulse className="h-8 w-12" />
+                            <SkeletonPulse className="h-3 w-16 mt-2" />
+                        </div>
+                    ))}
+                </div>
+
+                {/* Total Stats Card Skeleton */}
+                <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100">
+                    <SkeletonPulse className="h-3 w-28 mb-4" />
+                    <div className="grid grid-cols-2 gap-4">
+                        {[1, 2].map((i) => (
+                            <div key={i} className="flex flex-col items-center">
+                                <SkeletonPulse className="h-9 w-16" />
+                                <SkeletonPulse className="h-3 w-20 mt-2" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Quick Actions Skeleton */}
+                <div className="bg-white rounded-3xl p-5 shadow-md border border-gray-100">
+                    <SkeletonPulse className="h-3 w-28 mb-4" />
+                    <div className="grid grid-cols-3 gap-3">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-gray-50 border border-gray-100">
+                                <SkeletonPulse className="w-6 h-6 rounded" />
+                                <SkeletonPulse className="h-3 w-12" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* View Insights CTA Skeleton */}
+                <div className="w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl p-4 shadow-lg flex items-center justify-between animate-pulse">
+                    <div className="flex items-center gap-3">
+                        <SkeletonPulse className="w-6 h-6 rounded" />
+                        <SkeletonPulse className="h-5 w-32" />
+                    </div>
+                    <SkeletonPulse className="w-5 h-5 rounded" />
+                </div>
+            </div>
+
+            <BottomNav />
+
+            {/* Custom shimmer animation styles */}
+            <style>{`
+                @keyframes shimmer {
+                    0% { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
+                }
+                .animate-shimmer {
+                    animation: shimmer 1.5s ease-in-out infinite;
+                }
+            `}</style>
+        </div>
+    );
+};
 
 const Home: React.FC = () => {
     const { user } = useUser();
@@ -175,15 +290,9 @@ const Home: React.FC = () => {
         return lastCheckIn.toDateString() !== today.toDateString();
     };
 
+    // Show skeleton loading state instead of spinner
     if (authLoading || loading) {
-        return (
-            <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
-                <div className="text-center">
-                    <RefreshCw className="animate-spin mx-auto mb-4 text-pastel-pink" size={40} />
-                    <p className="text-sm text-gray-500">Loading your dashboard...</p>
-                </div>
-            </div>
-        );
+        return <DashboardSkeleton />;
     }
 
     const streak = dashboardData?.streak;
@@ -210,7 +319,7 @@ const Home: React.FC = () => {
                     </div>
                     <div className="w-12 h-12 rounded-full bg-white shadow-md border border-gray-100 flex items-center justify-center overflow-hidden">
                         {user?.imageUrl ? (
-                            <img src={user.imageUrl} alt="Profile" className="w-full h-full object-cover" />
+                            <img src={user.imageUrl || "/placeholder.svg"} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full bg-gradient-to-br from-pastel-pink to-pastel-lavender" />
                         )}
