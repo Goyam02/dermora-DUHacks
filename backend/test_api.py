@@ -30,9 +30,21 @@ def ok(name):
     print(f"[green]✔ {name}[/green]")
 
 def err(name, e):
-    FAILED.append((name, str(e)))
     print(f"[red]✖ {name}[/red]")
-    print(f"[dim]{e}[/dim]\n")
+
+    if isinstance(e, httpx.HTTPStatusError):
+        resp = e.response
+        print(f"[yellow]Status:[/yellow] {resp.status_code}")
+        print("[yellow]Response body:[/yellow]")
+        try:
+            print(resp.json())
+        except Exception:
+            print(resp.text)
+    else:
+        print(str(e))
+
+    FAILED.append((name, str(e)))
+    print()
 
 def run_test(name, fn):
     try:
