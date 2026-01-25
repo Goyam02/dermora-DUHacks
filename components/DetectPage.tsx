@@ -1,197 +1,139 @@
+// DetectPage.tsx
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import Webcam from 'react-webcam';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText, X, History, ArrowLeftRight, Trash, RotateCcw, Search, Check, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import {
+  Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText,
+  X, History, ArrowLeftRight, Trash, RotateCcw, Search, Check,
+  TrendingUp, TrendingDown, Minus
+} from 'lucide-react';
 import BottomNav from './BottomNav';
-import { uploadSkinImage, getImprovementTracker, getSkinHistory, analyzeExisting, compareImages, deleteImage, refreshImprovement, getMySkinImages } from '../services/api';
+import {
+  uploadSkinImage,
+  getImprovementTracker,
+  getSkinHistory,
+  analyzeExisting,
+  compareImages,
+  deleteImage,
+  refreshImprovement,
+  getMySkinImages
+} from '../services/api';
 
 const BACKEND_URL = "http://localhost:8000";
 
 interface SkinImage {
-    image_id: string;
-    image_url: string;
-    captured_at: string;
-    image_type: string;
+  image_id: string;
+  image_url: string;
+  captured_at: string;
+  image_type: string;
 }
 
 type ActionMode = 'none' | 'reanalyze' | 'compare' | 'delete';
 
 const DetectPage: React.FC = () => {
-        // Clerk auth hooks
-    const { getToken, isSignedIn } = useAuth();
-    const { user } = useUser();
-    const [backendUserId, setBackendUserId] = useState<string | null>(null);
-    const syncedRef = useRef(false);
-    const webcamRef = useRef<Webcam>(null);
-    const [imageSrc, setImageSrc] = useState<string | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [result, setResult] = useState<any | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [history, setHistory] = useState<any>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  /* ================= AUTH ================= */
+  const { getToken, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const [backendUserId, setBackendUserId] = useState<string | null>(null);
+  const syncedRef = useRef(false);
 
-    // User images state
-    const [userImages, setUserImages] = useState<SkinImage[]>([]);
-    const [loadingImages, setLoadingImages] = useState(false);
-    const [imagesError, setImagesError] = useState<string | null>(null);
+  const isAuthReady = Boolean(backendUserId);
 
-    // Selection state
-    const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-    const [actionMode, setActionMode] = useState<ActionMode>('none');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
+  /* ================= CAMERA ================= */
+  const webcamRef = useRef<Webcam>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Action results
-    const [actionResult, setActionResult] = useState<any>(null);
-    const [actionError, setActionError] = useState<string | null>(null);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  /* ================= STATE ================= */
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<any>(null);
 
-    // Other states
-    const [comparison, setComparison] = useState<any>(null);
-    const [comparisonError, setComparisonError] = useState<string | null>(null);
-    const [refreshResult, setRefreshResult] = useState<any>(null);
-    const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [userImages, setUserImages] = useState<SkinImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [imagesError, setImagesError] = useState<string | null>(null);
 
-    // Fetch user images
-    const getImageUrl = (imageUrl: string) => {
-        // If already absolute URL, return as-is
-        if (imageUrl.startsWith('http')) return imageUrl;
-    
-        // Remove any leading slashes and add exactly one
-        const cleanPath = imageUrl.replace(/^\/+/, '');
-        return `${BACKEND_URL}/${cleanPath}`;
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [actionMode, setActionMode] = useState<ActionMode>('none');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const [actionResult, setActionResult] = useState<any>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const [comparison, setComparison] = useState<any>(null);
+  const [refreshResult, setRefreshResult] = useState<any>(null);
+
+  /* ================= HELPERS ================= */
+  const getImageUrl = (url: string) =>
+    url.startsWith('http') ? url : `${BACKEND_URL}/${url.replace(/^\/+/, '')}`;
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  /* ================= SYNC USER ================= */
+  useEffect(() => {
+    if (!isSignedIn || !user || syncedRef.current) return;
+
+    const syncUser = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch("http://localhost:8000/auth/sync-user", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.uuid) {
+          setBackendUserId(data.uuid);
+          syncedRef.current = true;
+        }
+      } catch (e) {
+        console.error("User sync failed", e);
+      }
     };
 
-    
-    // Sync user and get backend UUID
-    useEffect(() => {
-        if (!isSignedIn || !user || syncedRef.current) return;
-        
-        const syncUser = async () => {
-            try {
-                const token = await getToken();
-                const response = await fetch("http://localhost:8000/auth/sync-user", {
-                    method: "POST",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                
-                const data = await response.json();
-                console.log("✅ Backend sync success:", data);
-                
-                if (data.uuid) {
-                    setBackendUserId(data.uuid);
-                    console.log("📝 Stored backend UUID:", data.uuid);
-                }
-                
-                syncedRef.current = true;
-            } catch (err) {
-                console.error("User sync failed:", err);
-            }
-        };
-        
-        syncUser();
-    }, [isSignedIn, user, getToken]);
-    
-    const fetchUserImages = useCallback(async () => {
-    if (!backendUserId) return;
+    syncUser();
+  }, [isSignedIn, user, getToken]);
+
+  /* ================= FETCH DATA ================= */
+  const fetchUserImages = useCallback(async () => {
+    if (!isAuthReady) return;
 
     setLoadingImages(true);
     setImagesError(null);
     try {
-        const token = await getToken();
-        const images = await getMySkinImages(token, backendUserId);
-        setUserImages(images);
-    } catch (err) {
-        console.error("Failed to fetch user images", err);
-        setImagesError("Failed to load images");
+      const token = await getToken();
+      const imgs = await getMySkinImages(token, backendUserId!);
+      setUserImages(imgs);
+    } catch {
+      setImagesError("Failed to load images");
     } finally {
-        setLoadingImages(false);
+      setLoadingImages(false);
     }
-}, [backendUserId, getToken]);
+  }, [isAuthReady, backendUserId, getToken]);
 
-    useEffect(() => {
-        if (!isSignedIn || !user || syncedRef.current) return;
+  useEffect(() => {
+    if (!isAuthReady) return;
 
-    const syncUser = async () => {
-        try {
-            const token = await getToken();
-            const response = await fetch("http://localhost:8000/auth/sync-user", {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            
-            const data = await response.json();
-            console.log("✅ Backend sync success:", data);
-            
-            if (data.uuid) {
-                setBackendUserId(data.uuid);
-                console.log("📝 Stored backend UUID:", data.uuid);
-            }
-            
-            syncedRef.current = true;
-        } catch (err) {
-            console.error("User sync failed:", err);
-        }
-    };
-
-    syncUser();
-}, [isSignedIn, user, getToken]);
-
-    // Fetch history on mount
-    useEffect(() => {
     const fetchHistory = async () => {
-        if (!backendUserId) return;
-
-        try {
-            const token = await getToken();
-            const data = await getImprovementTracker(token, backendUserId);
-            setHistory(data);
-        } catch (err) {
-            console.error("Failed to fetch history", err);
-        }
+      const token = await getToken();
+      const data = await getImprovementTracker(token, backendUserId!);
+      setHistory(data);
     };
 
-    if (backendUserId) {
-        fetchHistory();
-        fetchUserImages();
-    }
-}, [backendUserId, getToken, fetchUserImages]);
+    fetchHistory();
+    fetchUserImages();
+  }, [isAuthReady, backendUserId, getToken, fetchUserImages]);
 
-
-    const capture = useCallback(() => {
-        const imageSrc = webcamRef.current?.getScreenshot();
-        if (imageSrc) {
-            setImageSrc(imageSrc);
-            fetch(imageSrc)
-                .then(res => res.blob())
-                .then(blob => {
-                    const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-                    handleAnalysis(file);
-                });
-        }
-    }, [webcamRef]);
-
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImageSrc(reader.result as string);
-                handleAnalysis(file);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleAnalysis = async (file: File) => {
-    if (!backendUserId) {
-        setError("User authentication pending. Please wait...");
-        return;
+  /* ================= IMAGE HANDLING ================= */
+  const handleAnalysis = async (file: File) => {
+    if (!isAuthReady) {
+      setError("Setting up your account… try again in 1–2 seconds.");
+      return;
     }
 
     setIsAnalyzing(true);
@@ -199,406 +141,161 @@ const DetectPage: React.FC = () => {
     setResult(null);
 
     try {
-        const token = await getToken();
-        const backendResult = await uploadSkinImage(file, 'progress', token, backendUserId);
-        setResult(backendResult);
-        showToast("Image uploaded and analyzed successfully!", "success");
-        fetchUserImages();
-    } catch (err) {
-        console.error(err);
-        setError("Failed to analyze image. Please try again.");
-        showToast("Failed to analyze image", "error");
+      const token = await getToken();
+      const res = await uploadSkinImage(file, 'progress', token, backendUserId!);
+      setResult(res);
+      fetchUserImages();
+      showToast("Image uploaded and analyzed successfully!", "success");
+    } catch {
+      setError("Failed to analyze image.");
+      showToast("Failed to analyze image", "error");
     } finally {
-        setIsAnalyzing(false);
+      setIsAnalyzing(false);
     }
-};
+  };
 
-    const reset = () => {
-        setImageSrc(null);
-        setResult(null);
-        setError(null);
+  const capture = useCallback(() => {
+    if (!isAuthReady) return;
+
+    const img = webcamRef.current?.getScreenshot();
+    if (!img) return;
+
+    setImageSrc(img);
+    fetch(img)
+      .then(r => r.blob())
+      .then(b => handleAnalysis(new File([b], "capture.jpg", { type: "image/jpeg" })));
+  }, [isAuthReady]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAuthReady) return;
+
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageSrc(reader.result as string);
+      handleAnalysis(file);
     };
+    reader.readAsDataURL(file);
+  };
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
-    };
+  const reset = () => {
+    setImageSrc(null);
+    setResult(null);
+    setError(null);
+  };
 
-    const openModal = (mode: ActionMode) => {
+    /* ================= ACTION HELPERS ================= */
+
+    const formatDate = (dateString: string) =>
+        new Date(dateString).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+    
+      const openModal = (mode: ActionMode) => {
         setActionMode(mode);
         setSelectedImageIds([]);
         setActionResult(null);
-        setActionError(null);
         setIsModalOpen(true);
-    };
-
-    const closeModal = () => {
+      };
+    
+      const closeModal = () => {
         setIsModalOpen(false);
         setActionMode('none');
         setSelectedImageIds([]);
         setIsProcessing(false);
-    };
-
-    const toggleImageSelection = (imageId: string) => {
+      };
+    
+      const toggleImageSelection = (imageId: string) => {
         if (actionMode === 'compare') {
-            if (selectedImageIds.includes(imageId)) {
-                setSelectedImageIds(selectedImageIds.filter(id => id !== imageId));
-            } else if (selectedImageIds.length < 2) {
-                setSelectedImageIds([...selectedImageIds, imageId]);
-            }
+          setSelectedImageIds(prev =>
+            prev.includes(imageId)
+              ? prev.filter(id => id !== imageId)
+              : prev.length < 2
+              ? [...prev, imageId]
+              : prev
+          );
         } else {
-            setSelectedImageIds([imageId]);
+          setSelectedImageIds([imageId]);
         }
-    };
-
-        const handleConfirmAction = async () => {
-    if (!backendUserId) return;
-
-    setActionError(null);
-    setActionResult(null);
-    setIsProcessing(true);
-
-    try {
-        const token = await getToken();
-
-        if (actionMode === 'reanalyze' && selectedImageIds.length === 1) {
-            const res = await analyzeExisting(selectedImageIds[0], token, backendUserId);
+      };
+    
+      const isConfirmDisabled = () => {
+        if (actionMode === 'compare') return selectedImageIds.length !== 2;
+        if (actionMode === 'reanalyze' || actionMode === 'delete')
+          return selectedImageIds.length !== 1;
+        return true;
+      };
+    
+      const handleConfirmAction = async () => {
+        if (!isAuthReady) return;
+    
+        setIsProcessing(true);
+        try {
+          const token = await getToken();
+    
+          if (actionMode === 'reanalyze') {
+            const res = await analyzeExisting(selectedImageIds[0], token, backendUserId!);
             setActionResult(res);
             showToast("Image re-analyzed successfully!", "success");
-        } else if (actionMode === 'compare' && selectedImageIds.length === 2) {
-            const sortedIds = [...selectedImageIds].sort((a, b) => {
-                const imgA = userImages.find(img => img.image_id === a);
-                const imgB = userImages.find(img => img.image_id === b);
-                if (!imgA || !imgB) return 0;
-                return new Date(imgA.captured_at).getTime() - new Date(imgB.captured_at).getTime();
-            });
-            const res = await compareImages(sortedIds[0], sortedIds[1], token, backendUserId);
+          }
+    
+          if (actionMode === 'compare') {
+            const [a, b] = selectedImageIds;
+            const res = await compareImages(a, b, token, backendUserId!);
             setActionResult(res);
             showToast("Images compared successfully!", "success");
-        } else if (actionMode === 'delete' && selectedImageIds.length === 1) {
-            const res = await deleteImage(selectedImageIds[0], token, backendUserId);
-            setActionResult(res);
-            showToast("Image deleted successfully!", "success");
+          }
+    
+          if (actionMode === 'delete') {
+            await deleteImage(selectedImageIds[0], token, backendUserId!);
             fetchUserImages();
+            showToast("Image deleted successfully!", "success");
+          }
+    
+          closeModal();
+        } catch {
+          showToast(`Failed to ${actionMode}`, "error");
+        } finally {
+          setIsProcessing(false);
         }
-        closeModal();
-    } catch (err) {
-        console.error(err);
-        setActionError(`Failed to ${actionMode} image(s).`);
-        showToast(`Failed to ${actionMode} image(s)`, "error");
-    } finally {
-        setIsProcessing(false);
-    }
-};
-
-    const handleGetComparison = async () => {
-    if (!backendUserId) return;
-
-    setComparisonError(null);
-    setComparison(null);
-    try {
+      };
+    
+      const handleGetComparison = async () => {
+        if (!isAuthReady) return;
         const token = await getToken();
-        const res = await getSkinHistory(token, backendUserId);
+        const res = await getSkinHistory(token, backendUserId!);
         setComparison(res);
-        showToast("Comparison retrieved successfully!", "success");
-    } catch (err) {
-        console.error(err);
-        setComparisonError("Failed to get comparison.");
-        showToast("Failed to get comparison", "error");
-    }
-};
-
-    const handleRefresh = async () => {
-    if (!backendUserId) return;
-
-    setRefreshError(null);
-    setRefreshResult(null);
-    try {
+      };
+    
+      const handleRefresh = async () => {
+        if (!isAuthReady) return;
         const token = await getToken();
-        const res = await refreshImprovement(token, backendUserId);
+        const res = await refreshImprovement(token, backendUserId!);
         setRefreshResult(res);
-        showToast("Improvement data refreshed!", "success");
-        // Refresh history display
-        const data = await getImprovementTracker(token, backendUserId);
-        setHistory(data);
-    } catch (err) {
-        console.error(err);
-        setRefreshError("Failed to refresh improvement data.");
-        showToast("Failed to refresh", "error");
-    }
-};
+        const updated = await getImprovementTracker(token, backendUserId!);
+        setHistory(updated);
+      };
+    
+      const renderActionResult = (data: any) => data && null;
+      const renderImprovementTracker = (data: any) => data && null;
+      const renderWeeklyComparison = (data: any) => data && null;
+    
+  /* ================= LOADING ================= */
+  if (!backendUserId) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="animate-spin mx-auto mb-4 text-pastel-pink" size={48} />
+          <p className="text-lg font-medium text-gray-700">Initializing your session...</p>
+        </div>
+      </div>
+    );
+  }
 
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
-
-    const isConfirmDisabled = () => {
-        if (actionMode === 'reanalyze' || actionMode === 'delete') {
-            return selectedImageIds.length !== 1;
-        }
-        if (actionMode === 'compare') {
-            return selectedImageIds.length !== 2;
-        }
-        return true;
-    };
-
-    const renderImprovementTracker = (data: any) => {
-        if (!data) return null;
-
-        const getTrendIcon = (trend: string) => {
-            if (trend === 'improving') return <TrendingUp className="text-green-500" size={20} />;
-            if (trend === 'worsening') return <TrendingDown className="text-red-500" size={20} />;
-            return <Minus className="text-gray-400" size={20} />;
-        };
-
-        const getTrendColor = (trend: string) => {
-            if (trend === 'improving') return 'bg-green-50 border-green-200 text-green-700';
-            if (trend === 'worsening') return 'bg-red-50 border-red-200 text-red-700';
-            return 'bg-gray-50 border-gray-200 text-gray-700';
-        };
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <History className="text-blue-500" size={24} />
-                    <h2 className="text-xl font-bold text-gray-800">Improvement Tracker</h2>
-                </div>
-
-                {data.weekly_improvements && data.weekly_improvements.length > 0 && (
-                    <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Weekly Progress</h3>
-                        <div className="space-y-3">
-                            {data.weekly_improvements.map((week: any, index: number) => (
-                                <div key={index} className={`p-4 rounded-xl border ${getTrendColor(week.trend)}`}>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="font-semibold">Week {week.week_number}</span>
-                                        <div className="flex items-center gap-2">
-                                            {getTrendIcon(week.trend)}
-                                            <span className="text-sm font-medium capitalize">{week.trend}</span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm">{week.summary}</p>
-                                    {week.confidence_change && (
-                                        <p className="text-xs mt-2">Confidence change: {(week.confidence_change * 100).toFixed(1)}%</p>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {data.overall_trend && (
-                    <div className={`p-4 rounded-xl border ${getTrendColor(data.overall_trend)}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                            {getTrendIcon(data.overall_trend)}
-                            <span className="font-semibold">Overall Trend: <span className="capitalize">{data.overall_trend}</span></span>
-                        </div>
-                        {data.summary && <p className="text-sm">{data.summary}</p>}
-                    </div>
-                )}
-
-                {data.total_images && (
-                    <div className="mt-4 text-sm text-gray-500">
-                        Total images analyzed: {data.total_images}
-                    </div>
-                )}
-            </motion.div>
-        );
-    };
-
-    const renderComparisonResult = (data: any) => {
-        if (!data) return null;
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <ArrowLeftRight className="text-orange-500" size={24} />
-                    <h2 className="text-xl font-bold text-gray-800">Comparison Result</h2>
-                </div>
-
-                {data.before_image && data.after_image && (
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-gray-500 uppercase">Before</p>
-                            <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                <img src={getImageUrl(data.before_image.image_url)}  alt="Before" className="w-full h-full object-cover" />
-                            </div>
-                            <div className="p-3 bg-gray-50 rounded-xl">
-                                <p className="text-sm font-medium capitalize">{data.before_image.prediction}</p>
-                                <p className="text-xs text-gray-500">{formatDate(data.before_image.captured_at)}</p>
-                                <p className="text-xs text-gray-600 mt-1">Confidence: {(data.before_image.confidence * 100).toFixed(1)}%</p>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-semibold text-gray-500 uppercase">After</p>
-                            <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                <img src={getImageUrl(data.after_image.image_url)} alt="After" className="w-full h-full object-cover" />
-                            </div>
-                            <div className="p-3 bg-gray-50 rounded-xl">
-                                <p className="text-sm font-medium capitalize">{data.after_image.prediction}</p>
-                                <p className="text-xs text-gray-500">{formatDate(data.after_image.captured_at)}</p>
-                                <p className="text-xs text-gray-600 mt-1">Confidence: {(data.after_image.confidence * 100).toFixed(1)}%</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {data.improvement_detected !== undefined && (
-                    <div className={`p-4 rounded-xl border ${data.improvement_detected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                            {data.improvement_detected ? <TrendingUp size={20} /> : <Minus size={20} />}
-                            <span className="font-semibold">{data.improvement_detected ? 'Improvement Detected!' : 'No Significant Change'}</span>
-                        </div>
-                        {data.summary && <p className="text-sm">{data.summary}</p>}
-                        {data.confidence_change && (
-                            <p className="text-xs mt-2">Confidence change: {(data.confidence_change * 100).toFixed(1)}%</p>
-                        )}
-                    </div>
-                )}
-
-                {data.days_between && (
-                    <div className="mt-4 text-sm text-gray-500">
-                        Time between images: {data.days_between} days
-                    </div>
-                )}
-            </motion.div>
-        );
-    };
-
-    const renderWeeklyComparison = (data: any) => {
-        if (!data) return null;
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
-            >
-                <div className="flex items-center gap-3 mb-6">
-                    <History className="text-indigo-500" size={24} />
-                    <h2 className="text-xl font-bold text-gray-800">Weekly Comparison</h2>
-                </div>
-
-                {data.comparison && (
-                    <>
-                        {data.comparison.before_image && data.comparison.after_image && (
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase">Before</p>
-                                    <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                        <img src={getImageUrl(data.comparison.before_image.image_url)}  alt="Before" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="p-3 bg-gray-50 rounded-xl">
-                                        <p className="text-sm font-medium capitalize">{data.comparison.before_image.prediction}</p>
-                                        <p className="text-xs text-gray-500">{formatDate(data.comparison.before_image.captured_at)}</p>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase">After</p>
-                                    <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                        <img  src={getImageUrl(data.comparison.after_image.image_url)}  alt="After" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="p-3 bg-gray-50 rounded-xl">
-                                        <p className="text-sm font-medium capitalize">{data.comparison.after_image.prediction}</p>
-                                        <p className="text-xs text-gray-500">{formatDate(data.comparison.after_image.captured_at)}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {data.comparison.summary && (
-                            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-700">
-                                <p className="text-sm">{data.comparison.summary}</p>
-                            </div>
-                        )}
-                    </>
-                )}
-
-                {data.message && (
-                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-700">
-                        <p className="text-sm">{data.message}</p>
-                    </div>
-                )}
-            </motion.div>
-        );
-    };
-
-    const renderActionResult = (data: any) => {
-        if (!data) return null;
-
-        if (actionMode === 'reanalyze') {
-            return (
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
-                >
-                    <div className="flex items-center gap-3 mb-4">
-                        <CheckCircle className="text-green-500" size={24} />
-                        <h2 className="text-xl font-bold text-gray-800">Re-Analysis Complete</h2>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="p-3 bg-gray-50 rounded-xl">
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Prediction</p>
-                            <p className="font-bold text-lg text-gray-900 capitalize">{data.prediction}</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-xl">
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Confidence</p>
-                            <p className="font-bold text-lg text-gray-900">{(data.confidence * 100).toFixed(1)}%</p>
-                        </div>
-                    </div>
-
-                    {data.message && (
-                        <p className="text-sm text-gray-600 leading-relaxed">{data.message}</p>
-                    )}
-                </motion.div>
-            );
-        }
-
-        if (actionMode === 'compare') {
-            return renderComparisonResult(data);
-        }
-
-        if (actionMode === 'delete') {
-            return (
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mt-4"
-                >
-                    <div className="flex items-center gap-3 mb-4">
-                        <CheckCircle className="text-green-500" size={24} />
-                        <h2 className="text-xl font-bold text-gray-800">Image Deleted</h2>
-                    </div>
-                    <p className="text-sm text-gray-600">{data.message || 'Image has been successfully deleted from your history.'}</p>
-                </motion.div>
-            );
-        }
-
-        return null;
-    };
-
-            // Show loading while syncing
-    if (!backendUserId) {
-        return (
-            <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
-                <div className="text-center">
-                    <RefreshCw className="animate-spin mx-auto mb-4 text-pastel-pink" size={48} />
-                    <p className="text-lg font-medium text-gray-700">Initializing your session...</p>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text pb-24 relative overflow-x-hidden">
