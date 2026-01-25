@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import Webcam from 'react-webcam';
@@ -25,6 +27,105 @@ import {
 const isNative = Capacitor.isNativePlatform();
 // const BACKEND_URL = "http://localhost:8000";
 const BACKEND_URL = "https://continually-removing-delayed-program.trycloudflare.com";
+
+// Skeleton Pulse Component
+const SkeletonPulse: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className = '', style }) => (
+    <div 
+        className={`animate-shimmer bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] rounded ${className}`}
+        style={style}
+    />
+);
+
+// Detect Page Skeleton
+const DetectPageSkeleton: React.FC = () => (
+    <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-[#1A1A1A] pb-[110px] relative overflow-x-hidden">
+        {/* Shimmer Animation Style */}
+        <style>{`
+            @keyframes shimmer {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+            .animate-shimmer {
+                animation: shimmer 1.5s ease-in-out infinite;
+            }
+        `}</style>
+
+        {/* Decorative Background */}
+        <div className="absolute top-[-10%] right-[-20%] w-[400px] h-[400px] bg-[#FFB6C1]/30 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-[10%] left-[-10%] w-[300px] h-[300px] bg-[#8EA7E9]/20 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Header Skeleton */}
+        <div className="sticky top-0 bg-[#FFF5F5]/80 backdrop-blur-lg z-40 pt-8 px-6 pb-4 border-b border-gray-200/50">
+            <SkeletonPulse className="h-9 w-48 mb-2" />
+            <SkeletonPulse className="h-4 w-56" />
+        </div>
+
+        <div className="px-6 space-y-6 mt-6">
+            {/* Camera Section Skeleton */}
+            <div className="relative w-full h-[420px] bg-gray-200 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
+                <SkeletonPulse className="w-full h-full rounded-none" />
+                
+                {/* Camera Controls Skeleton */}
+                <div className="absolute bottom-8 w-full flex justify-center items-center gap-6 z-10 px-6">
+                    <SkeletonPulse className="w-14 h-14 rounded-full" />
+                    <SkeletonPulse className="w-20 h-20 rounded-full" />
+                </div>
+            </div>
+
+            {/* Quick Actions Skeleton */}
+            <div className="mt-8">
+                <div className="flex items-center gap-2 mb-4">
+                    <SkeletonPulse className="w-6 h-6 rounded" />
+                    <SkeletonPulse className="h-7 w-36" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {[1, 2, 3, 4].map((_, index) => (
+                        <div 
+                            key={index}
+                            className="p-6 bg-white rounded-3xl shadow-lg border border-gray-100 flex flex-col items-center gap-3"
+                        >
+                            <SkeletonPulse className="w-8 h-8 rounded-lg" />
+                            <SkeletonPulse className="h-4 w-20" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Progress Tracker Skeleton */}
+            <div className="bg-white rounded-3xl p-6 shadow-lg border border-gray-100 mt-6">
+                <div className="flex items-center gap-3 mb-6">
+                    <SkeletonPulse className="w-7 h-7 rounded" />
+                    <SkeletonPulse className="h-7 w-36" />
+                </div>
+                <div className="space-y-4">
+                    {[1, 2, 3].map((_, index) => (
+                        <div key={index} className="p-5 rounded-2xl border-2 border-gray-100 bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                                <SkeletonPulse className="h-5 w-20" />
+                                <SkeletonPulse className="h-6 w-24 rounded-full" />
+                            </div>
+                            <SkeletonPulse className="h-4 w-full mb-2" />
+                            <SkeletonPulse className="h-4 w-3/4" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* History Section Skeleton */}
+            <div className="bg-white rounded-3xl p-6 mt-8 shadow-lg border border-gray-100">
+                <div className="w-full flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <SkeletonPulse className="w-7 h-7 rounded" />
+                        <SkeletonPulse className="h-7 w-44" />
+                    </div>
+                    <SkeletonPulse className="w-6 h-6 rounded" />
+                </div>
+            </div>
+        </div>
+
+        <BottomNav />
+    </div>
+);
 
 interface SkinImage {
     image_id: string;
@@ -142,7 +243,7 @@ const DetectPage: React.FC = () => {
       
         try {
           if (isNative) {
-            // 📱 ANDROID / IOS
+            // ANDROID / IOS
             const photo = await CapCamera.getPhoto({
                 quality: 90,
                 resultType: CameraResultType.Base64,
@@ -165,7 +266,7 @@ const DetectPage: React.FC = () => {
             handleAnalysis(file);
       
           } else {
-            // 💻 WEB
+            // WEB
             const imageSrc = webcamRef.current?.getScreenshot();
             if (!imageSrc) return;
       
@@ -264,7 +365,7 @@ const DetectPage: React.FC = () => {
         setIsModalOpen(false);
         setSelectedImageIds([]);
         setIsProcessing(false);
-        // ❌ DO NOT reset actionMode here
+        // DO NOT reset actionMode here
     };
     
 
@@ -411,15 +512,9 @@ useEffect(() => {
   syncUser();
 }, [isSignedIn, user, getToken]);
 
+    // Show skeleton while loading
     if (!backendUserId) {
-        return (
-            <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
-                <div className="text-center">
-                    <RefreshCw className="animate-spin mx-auto mb-4 text-[#FFB6C1]" size={48} />
-                    <p className="text-lg font-medium text-gray-700">Initializing your session...</p>
-                </div>
-            </div>
-        );
+        return <DetectPageSkeleton />;
     }
 
     return (
@@ -577,7 +672,7 @@ useEffect(() => {
                                 exit={{ opacity: 0 }}
                                 className="w-full h-full relative"
                             >
-                                <img src={imageSrc} alt="Captured" className="w-full h-full object-cover" />
+                                <img src={imageSrc || "/placeholder.svg"} alt="Captured" className="w-full h-full object-cover" />
                                 
                                 {/* Analyzing Overlay */}
                                 {isAnalyzing && (
@@ -865,7 +960,7 @@ useEffect(() => {
                                             >
                                                 <div className="aspect-square relative">
                                                     <img
-                                                        src={getImageUrl(img.image_url)}
+                                                        src={getImageUrl(img.image_url) || "/placeholder.svg"}
                                                         alt={`Skin ${img.image_type}`}
                                                         className="w-full h-full object-cover"
                                                         loading="lazy"
@@ -933,16 +1028,16 @@ useEffect(() => {
     {/* Images */}
     <div className="grid grid-cols-2 gap-4 mb-6">
       <img
-        src={getImageUrl(actionResult.before_image.image_url)}
+        src={getImageUrl(actionResult.before_image.image_url) || "/placeholder.svg"}
         className="rounded-2xl"
       />
       <img
-        src={getImageUrl(actionResult.after_image.image_url)}
+        src={getImageUrl(actionResult.after_image.image_url) || "/placeholder.svg"}
         className="rounded-2xl"
       />
     </div>
 
-    {/* ✅ SUMMARY */}
+    {/* SUMMARY */}
     <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
       <p className="text-xs uppercase font-semibold text-orange-600 mb-1">
         Analysis Summary
@@ -952,7 +1047,7 @@ useEffect(() => {
       </p>
     </div>
 
-    {/* ✅ METRICS */}
+    {/* METRICS */}
     <div className="grid grid-cols-3 gap-3 text-center">
       <div className="bg-gray-50 rounded-xl p-3">
         <p className="text-xs text-gray-500">Days Between</p>
@@ -960,7 +1055,7 @@ useEffect(() => {
       </div>
 
       <div className="bg-gray-50 rounded-xl p-3">
-        <p className="text-xs text-gray-500">Confidence Δ</p>
+        <p className="text-xs text-gray-500">Confidence Change</p>
         <p className="font-bold">
           {(actionResult.confidence_change * 100).toFixed(3)}%
         </p>
@@ -1027,9 +1122,9 @@ useEffect(() => {
                                         {actionMode === 'delete' && 'Select Image to Delete'}
                                     </h2>
                                     <p className="text-sm text-gray-500 mt-1 font-medium">
-                                        {actionMode === 'compare' && selectedImageIds.length === 2 && '✓ Ready to compare'}
+                                        {actionMode === 'compare' && selectedImageIds.length === 2 && 'Ready to compare'}
                                         {actionMode === 'compare' && selectedImageIds.length < 2 && `${selectedImageIds.length}/2 selected`}
-                                        {actionMode !== 'compare' && selectedImageIds.length > 0 && '✓ Image selected'}
+                                        {actionMode !== 'compare' && selectedImageIds.length > 0 && 'Image selected'}
                                         {selectedImageIds.length === 0 && 'Tap to select'}
                                     </p>
                                 </div>
@@ -1072,7 +1167,7 @@ useEffect(() => {
                                                 >
                                                     <div className="aspect-square relative">
                                                         <img
-                                                            src={getImageUrl(img.image_url)}
+                                                            src={getImageUrl(img.image_url) || "/placeholder.svg"}
                                                             alt={`Skin ${img.image_type}`}
                                                             className="w-full h-full object-cover"
                                                         />
