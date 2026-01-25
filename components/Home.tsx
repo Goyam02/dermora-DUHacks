@@ -15,14 +15,58 @@ import {
 } from 'lucide-react';
 import BottomNav from './BottomNav';
 import { useBackendAuth } from '../contexts/AuthContext';
-import { getDashboard, getDailyInsight, dailyCheckIn, DashboardData, DailyInsight } from '../services/api';
+
+// Define proper types based on backend response
+interface StreakData {
+    current_streak: number;
+    longest_streak: number;
+    last_check_in: string | null;
+    total_check_ins: number;
+}
+
+interface RecentActivity {
+    images_this_week: number;
+    moods_this_week: number;
+    days_active: number;
+}
+
+interface QuickStats {
+    total_images: number;
+    total_mood_logs: number;
+    avg_mood_this_week: number;
+    days_tracked: number;
+    images_this_week: number;
+    days_active_this_month: number;
+    mood_avg_this_week: number;
+}
+
+interface DashboardData {
+    streak: StreakData;
+    recent_activity: RecentActivity;
+    quick_stats: QuickStats;
+    daily_insight: string | null;
+}
+
+interface DailyInsight {
+    insight_text: string;
+    insight_type: string;
+    icon: string;
+    generated_at: string;
+}
+
+interface CheckInResponse {
+    current_streak: number;
+    longest_streak: number;
+    last_check_in: string;
+    streak_maintained: boolean;
+    message: string;
+}
 
 const Home: React.FC = () => {
     const { user } = useUser();
     const { getToken } = useAuth();
     const navigate = useNavigate();
     
-    // Use global auth context - no more syncing per page!
     const { backendUserId, isLoading: authLoading } = useBackendAuth();
     
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -30,7 +74,7 @@ const Home: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [checkingIn, setCheckingIn] = useState(false);
 
-    // Fetch dashboard data - only when backendUserId is available
+    // Fetch dashboard data
     useEffect(() => {
         const fetchDashboard = async () => {
             if (!backendUserId) return;
@@ -39,13 +83,36 @@ const Home: React.FC = () => {
                 setLoading(true);
                 const token = await getToken();
                 
-                const [dashboard, insight] = await Promise.all([
-                    getDashboard(token, backendUserId),
-                    getDailyInsight(token, backendUserId).catch(() => null)
-                ]);
+                // Fetch dashboard data
+                const dashboardResponse = await fetch('http://localhost:8000/engagement/dashboard', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                if (!dashboardResponse.ok) {
+                    throw new Error('Failed to fetch dashboard');
+                }
+                
+                const dashboard = await dashboardResponse.json();
+                
+                // Fetch daily insight
+                const insightResponse = await fetch('http://localhost:8000/engagement/insights/daily', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-User-Id': backendUserId
+                    }
+                });
+                
+                let insight = null;
+                if (insightResponse.ok) {
+                    insight = await insightResponse.json();
+                }
                 
                 setDashboardData(dashboard);
                 setDailyInsight(insight);
+                
             } catch (err) {
                 console.error("Failed to fetch dashboard:", err);
             } finally {
@@ -63,11 +130,34 @@ const Home: React.FC = () => {
         try {
             setCheckingIn(true);
             const token = await getToken();
-            await dailyCheckIn(token, backendUserId);
             
-            // Refresh dashboard
-            const dashboard = await getDashboard(token, backendUserId);
-            setDashboardData(dashboard);
+            const response = await fetch('http://localhost:8000/engagement/check-in', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Id': backendUserId
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Check-in failed');
+            }
+            
+            const result: CheckInResponse = await response.json();
+            
+            // Refresh dashboard to get updated streak
+            const dashboardResponse = await fetch('http://localhost:8000/engagement/dashboard', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Id': backendUserId
+                }
+            });
+            
+            if (dashboardResponse.ok) {
+                const dashboard = await dashboardResponse.json();
+                setDashboardData(dashboard);
+            }
+            
         } catch (err) {
             console.error("Check-in failed:", err);
         } finally {
@@ -75,32 +165,16 @@ const Home: React.FC = () => {
         }
     };
 
-    // Format time ago
-    const timeAgo = (timestamp: string) => {
-        const now = new Date();
-        const past = new Date(timestamp);
-        const diffMs = now.getTime() - past.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffDays > 0) return `${diffDays}d ago`;
-        if (diffHours > 0) return `${diffHours}h ago`;
-        if (diffMins > 0) return `${diffMins}m ago`;
-        return 'Just now';
+    // Check if user can check in today
+    const canCheckInToday = () => {
+        if (!dashboardData?.streak?.last_check_in) return true;
+        
+        const lastCheckIn = new Date(dashboardData.streak.last_check_in);
+        const today = new Date();
+        
+        return lastCheckIn.toDateString() !== today.toDateString();
     };
 
-    // Get activity icon
-    const getActivityIcon = (type: string) => {
-        switch (type) {
-            case 'skin': return <Camera size={16} className="text-pastel-pink" />;
-            case 'mood': return <Activity size={16} className="text-pastel-blue" />;
-            case 'voice': return <Brain size={16} className="text-pastel-lavender" />;
-            default: return <Sparkles size={16} className="text-pastel-orange" />;
-        }
-    };
-
-    // Loading screen - much faster now!
     if (authLoading || loading) {
         return (
             <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
@@ -114,10 +188,10 @@ const Home: React.FC = () => {
 
     const streak = dashboardData?.streak;
     const stats = dashboardData?.quick_stats;
-    const activity = dashboardData?.recent_activity || [];
+    const recentActivity = dashboardData?.recent_activity;
 
     return (
-        <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text overflow-x-hidden pb-24">
+        <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text overflow-x-hidden pb-[110px]">
             
             {/* Header */}
             <motion.nav 
@@ -162,10 +236,10 @@ const Home: React.FC = () => {
                                     </span>
                                 </div>
                                 <p className="text-sm text-gray-600">
-                                    {streak.current_streak === 1 ? 'Day Streak' : 'Day Streak'}
+                                    {streak.current_streak === 1 ? 'Day Streak' : 'Days Streak'}
                                 </p>
                             </div>
-                            {streak.can_check_in_today && (
+                            {canCheckInToday() && (
                                 <motion.button
                                     whileTap={{ scale: 0.95 }}
                                     onClick={handleCheckIn}
@@ -178,7 +252,7 @@ const Home: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
                             <span>🏆 Best: {streak.longest_streak} days</span>
-                            {!streak.can_check_in_today && (
+                            {!canCheckInToday() && (
                                 <span className="text-green-600">✓ Checked in today</span>
                             )}
                         </div>
@@ -202,7 +276,7 @@ const Home: React.FC = () => {
                                     Daily Insight
                                 </h3>
                                 <p className="text-sm text-gray-700 leading-relaxed">
-                                    {dailyInsight.message}
+                                    {dailyInsight.insight_text}
                                 </p>
                             </div>
                         </div>
@@ -220,17 +294,17 @@ const Home: React.FC = () => {
                         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
                             <Camera size={24} className="text-pastel-pink mx-auto mb-2" />
                             <div className="text-2xl font-bold text-[#1A1A1A]">
-                                {stats.images_this_week}
+                                {recentActivity?.images_this_week || 0}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                                Images
+                                This Week
                             </div>
                         </div>
                         
                         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
                             <Activity size={24} className="text-pastel-blue mx-auto mb-2" />
                             <div className="text-2xl font-bold text-[#1A1A1A]">
-                                {stats.mood_avg_this_week?.toFixed(1) || '—'}
+                                {stats.avg_mood_this_week?.toFixed(1) || '—'}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                                 Avg Mood
@@ -240,10 +314,38 @@ const Home: React.FC = () => {
                         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
                             <Calendar size={24} className="text-pastel-lavender mx-auto mb-2" />
                             <div className="text-2xl font-bold text-[#1A1A1A]">
-                                {stats.days_active_this_month}
+                                {recentActivity?.days_active || 0}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                                 Active Days
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Total Stats Card */}
+                {stats && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.25 }}
+                        className="bg-white rounded-3xl p-5 shadow-md border border-gray-100"
+                    >
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                            Your Progress
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-pink-600">
+                                    {stats.total_images || 0}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">Total Images</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-blue-600">
+                                    {stats.total_mood_logs || 0}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">Mood Logs</div>
                             </div>
                         </div>
                     </motion.div>
@@ -288,43 +390,6 @@ const Home: React.FC = () => {
                         </motion.button>
                     </div>
                 </motion.div>
-
-                {/* Recent Activity */}
-                {activity.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                        className="bg-white rounded-3xl p-5 shadow-md border border-gray-100"
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
-                                Recent Activity
-                            </h3>
-                            <ChevronRight size={18} className="text-gray-300" />
-                        </div>
-                        <div className="space-y-3">
-                            {activity.slice(0, 5).map((item, idx) => (
-                                <div 
-                                    key={idx} 
-                                    className="flex items-start gap-3 pb-3 border-b border-gray-50 last:border-0 last:pb-0"
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        {getActivityIcon(item.type)}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-700 truncate">
-                                            {item.description}
-                                        </p>
-                                        <span className="text-xs text-gray-400">
-                                            {timeAgo(item.timestamp)}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
 
                 {/* View Insights CTA */}
                 <motion.button
