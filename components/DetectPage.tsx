@@ -1,11 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import Webcam from 'react-webcam';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText, X, History, ArrowLeftRight, Trash, RotateCcw, Search, Check, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import BottomNav from './BottomNav';
 import { uploadSkinImage, getImprovementTracker, getSkinHistory, analyzeExisting, compareImages, deleteImage, refreshImprovement, getMySkinImages } from '../services/api';
 
-const USER_ID = "00000000-0000-0000-0000-000000000000";
 const BACKEND_URL = "http://localhost:8000";
 
 interface SkinImage {
@@ -18,6 +18,11 @@ interface SkinImage {
 type ActionMode = 'none' | 'reanalyze' | 'compare' | 'delete';
 
 const DetectPage: React.FC = () => {
+        // Clerk auth hooks
+    const { getToken, isSignedIn } = useAuth();
+    const { user } = useUser();
+    const [backendUserId, setBackendUserId] = useState<string | null>(null);
+    const syncedRef = useRef(false);
     const webcamRef = useRef<Webcam>(null);
     const [imageSrc, setImageSrc] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -49,33 +54,114 @@ const DetectPage: React.FC = () => {
     const [refreshError, setRefreshError] = useState<string | null>(null);
 
     // Fetch user images
+    const getImageUrl = (imageUrl: string) => {
+        // If already absolute URL, return as-is
+        if (imageUrl.startsWith('http')) return imageUrl;
+    
+        // Remove any leading slashes and add exactly one
+        const cleanPath = imageUrl.replace(/^\/+/, '');
+        return `${BACKEND_URL}/${cleanPath}`;
+    };
+
+    
+    // Sync user and get backend UUID
+    useEffect(() => {
+        if (!isSignedIn || !user || syncedRef.current) return;
+        
+        const syncUser = async () => {
+            try {
+                const token = await getToken();
+                const response = await fetch("http://localhost:8000/auth/sync-user", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                
+                const data = await response.json();
+                console.log("✅ Backend sync success:", data);
+                
+                if (data.uuid) {
+                    setBackendUserId(data.uuid);
+                    console.log("📝 Stored backend UUID:", data.uuid);
+                }
+                
+                syncedRef.current = true;
+            } catch (err) {
+                console.error("User sync failed:", err);
+            }
+        };
+        
+        syncUser();
+    }, [isSignedIn, user, getToken]);
+    
     const fetchUserImages = useCallback(async () => {
-        setLoadingImages(true);
-        setImagesError(null);
+    if (!backendUserId) return;
+
+    setLoadingImages(true);
+    setImagesError(null);
+    try {
+        const token = await getToken();
+        const images = await getMySkinImages(token, backendUserId);
+        setUserImages(images);
+    } catch (err) {
+        console.error("Failed to fetch user images", err);
+        setImagesError("Failed to load images");
+    } finally {
+        setLoadingImages(false);
+    }
+}, [backendUserId, getToken]);
+
+    useEffect(() => {
+        if (!isSignedIn || !user || syncedRef.current) return;
+
+    const syncUser = async () => {
         try {
-            const images = await getMySkinImages();
-            setUserImages(images);
+            const token = await getToken();
+            const response = await fetch("http://localhost:8000/auth/sync-user", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            
+            const data = await response.json();
+            console.log("✅ Backend sync success:", data);
+            
+            if (data.uuid) {
+                setBackendUserId(data.uuid);
+                console.log("📝 Stored backend UUID:", data.uuid);
+            }
+            
+            syncedRef.current = true;
         } catch (err) {
-            console.error("Failed to fetch user images", err);
-            setImagesError("Failed to load images");
-        } finally {
-            setLoadingImages(false);
+            console.error("User sync failed:", err);
         }
-    }, []);
+    };
+
+    syncUser();
+}, [isSignedIn, user, getToken]);
 
     // Fetch history on mount
     useEffect(() => {
-        const fetchHistory = async () => {
-            try {
-                const data = await getImprovementTracker(USER_ID);
-                setHistory(data);
-            } catch (err) {
-                console.error("Failed to fetch history", err);
-            }
-        };
+    const fetchHistory = async () => {
+        if (!backendUserId) return;
+
+        try {
+            const token = await getToken();
+            const data = await getImprovementTracker(token, backendUserId);
+            setHistory(data);
+        } catch (err) {
+            console.error("Failed to fetch history", err);
+        }
+    };
+
+    if (backendUserId) {
         fetchHistory();
         fetchUserImages();
-    }, [fetchUserImages]);
+    }
+}, [backendUserId, getToken, fetchUserImages]);
+
 
     const capture = useCallback(() => {
         const imageSrc = webcamRef.current?.getScreenshot();
@@ -103,23 +189,29 @@ const DetectPage: React.FC = () => {
     };
 
     const handleAnalysis = async (file: File) => {
-        setIsAnalyzing(true);
-        setError(null);
-        setResult(null);
+    if (!backendUserId) {
+        setError("User authentication pending. Please wait...");
+        return;
+    }
 
-        try {
-            const backendResult = await uploadSkinImage(file, USER_ID, 'progress');
-            setResult(backendResult);
-            showToast("Image uploaded and analyzed successfully!", "success");
-            fetchUserImages();
-        } catch (err) {
-            console.error(err);
-            setError("Failed to analyze image. Please try again.");
-            showToast("Failed to analyze image", "error");
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
+    setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+        const token = await getToken();
+        const backendResult = await uploadSkinImage(file, 'progress', token, backendUserId);
+        setResult(backendResult);
+        showToast("Image uploaded and analyzed successfully!", "success");
+        fetchUserImages();
+    } catch (err) {
+        console.error(err);
+        setError("Failed to analyze image. Please try again.");
+        showToast("Failed to analyze image", "error");
+    } finally {
+        setIsAnalyzing(false);
+    }
+};
 
     const reset = () => {
         setImageSrc(null);
@@ -159,72 +251,82 @@ const DetectPage: React.FC = () => {
         }
     };
 
-    const handleConfirmAction = async () => {
-        setActionError(null);
-        setActionResult(null);
-        setIsProcessing(true);
+        const handleConfirmAction = async () => {
+    if (!backendUserId) return;
 
-        try {
-            if (actionMode === 'reanalyze' && selectedImageIds.length === 1) {
-                const res = await analyzeExisting(selectedImageIds[0]);
-                setActionResult(res);
-                showToast("Image re-analyzed successfully!", "success");
-            } else if (actionMode === 'compare' && selectedImageIds.length === 2) {
-                const sortedIds = [...selectedImageIds].sort((a, b) => {
-                    const imgA = userImages.find(img => img.image_id === a);
-                    const imgB = userImages.find(img => img.image_id === b);
-                    if (!imgA || !imgB) return 0;
-                    return new Date(imgA.captured_at).getTime() - new Date(imgB.captured_at).getTime();
-                });
-                const res = await compareImages(sortedIds[0], sortedIds[1]);
-                setActionResult(res);
-                showToast("Images compared successfully!", "success");
-            } else if (actionMode === 'delete' && selectedImageIds.length === 1) {
-                const res = await deleteImage(selectedImageIds[0]);
-                setActionResult(res);
-                showToast("Image deleted successfully!", "success");
-                fetchUserImages();
-            }
-            closeModal();
-        } catch (err) {
-            console.error(err);
-            setActionError(`Failed to ${actionMode} image(s).`);
-            showToast(`Failed to ${actionMode} image(s)`, "error");
-        } finally {
-            setIsProcessing(false);
+    setActionError(null);
+    setActionResult(null);
+    setIsProcessing(true);
+
+    try {
+        const token = await getToken();
+
+        if (actionMode === 'reanalyze' && selectedImageIds.length === 1) {
+            const res = await analyzeExisting(selectedImageIds[0], token, backendUserId);
+            setActionResult(res);
+            showToast("Image re-analyzed successfully!", "success");
+        } else if (actionMode === 'compare' && selectedImageIds.length === 2) {
+            const sortedIds = [...selectedImageIds].sort((a, b) => {
+                const imgA = userImages.find(img => img.image_id === a);
+                const imgB = userImages.find(img => img.image_id === b);
+                if (!imgA || !imgB) return 0;
+                return new Date(imgA.captured_at).getTime() - new Date(imgB.captured_at).getTime();
+            });
+            const res = await compareImages(sortedIds[0], sortedIds[1], token, backendUserId);
+            setActionResult(res);
+            showToast("Images compared successfully!", "success");
+        } else if (actionMode === 'delete' && selectedImageIds.length === 1) {
+            const res = await deleteImage(selectedImageIds[0], token, backendUserId);
+            setActionResult(res);
+            showToast("Image deleted successfully!", "success");
+            fetchUserImages();
         }
-    };
+        closeModal();
+    } catch (err) {
+        console.error(err);
+        setActionError(`Failed to ${actionMode} image(s).`);
+        showToast(`Failed to ${actionMode} image(s)`, "error");
+    } finally {
+        setIsProcessing(false);
+    }
+};
 
     const handleGetComparison = async () => {
-        setComparisonError(null);
-        setComparison(null);
-        try {
-            const res = await getSkinHistory(USER_ID);
-            setComparison(res);
-            showToast("Comparison retrieved successfully!", "success");
-        } catch (err) {
-            console.error(err);
-            setComparisonError("Failed to get comparison.");
-            showToast("Failed to get comparison", "error");
-        }
-    };
+    if (!backendUserId) return;
+
+    setComparisonError(null);
+    setComparison(null);
+    try {
+        const token = await getToken();
+        const res = await getSkinHistory(token, backendUserId);
+        setComparison(res);
+        showToast("Comparison retrieved successfully!", "success");
+    } catch (err) {
+        console.error(err);
+        setComparisonError("Failed to get comparison.");
+        showToast("Failed to get comparison", "error");
+    }
+};
 
     const handleRefresh = async () => {
-        setRefreshError(null);
-        setRefreshResult(null);
-        try {
-            const res = await refreshImprovement(USER_ID);
-            setRefreshResult(res);
-            showToast("Improvement data refreshed!", "success");
-            // Refresh history display
-            const data = await getImprovementTracker(USER_ID);
-            setHistory(data);
-        } catch (err) {
-            console.error(err);
-            setRefreshError("Failed to refresh improvement data.");
-            showToast("Failed to refresh", "error");
-        }
-    };
+    if (!backendUserId) return;
+
+    setRefreshError(null);
+    setRefreshResult(null);
+    try {
+        const token = await getToken();
+        const res = await refreshImprovement(token, backendUserId);
+        setRefreshResult(res);
+        showToast("Improvement data refreshed!", "success");
+        // Refresh history display
+        const data = await getImprovementTracker(token, backendUserId);
+        setHistory(data);
+    } catch (err) {
+        console.error(err);
+        setRefreshError("Failed to refresh improvement data.");
+        showToast("Failed to refresh", "error");
+    }
+};
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -328,7 +430,7 @@ const DetectPage: React.FC = () => {
                         <div className="space-y-2">
                             <p className="text-xs font-semibold text-gray-500 uppercase">Before</p>
                             <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                <img src={`${BACKEND_URL}${data.before_image.image_url}`} alt="Before" className="w-full h-full object-cover" />
+                                <img src={getImageUrl(data.before_image.image_url)}  alt="Before" className="w-full h-full object-cover" />
                             </div>
                             <div className="p-3 bg-gray-50 rounded-xl">
                                 <p className="text-sm font-medium capitalize">{data.before_image.prediction}</p>
@@ -339,7 +441,7 @@ const DetectPage: React.FC = () => {
                         <div className="space-y-2">
                             <p className="text-xs font-semibold text-gray-500 uppercase">After</p>
                             <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                <img src={`${BACKEND_URL}${data.after_image.image_url}`} alt="After" className="w-full h-full object-cover" />
+                                <img src={getImageUrl(data.after_image.image_url)} alt="After" className="w-full h-full object-cover" />
                             </div>
                             <div className="p-3 bg-gray-50 rounded-xl">
                                 <p className="text-sm font-medium capitalize">{data.after_image.prediction}</p>
@@ -393,7 +495,7 @@ const DetectPage: React.FC = () => {
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-gray-500 uppercase">Before</p>
                                     <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                        <img src={`${BACKEND_URL}${data.comparison.before_image.image_url}`} alt="Before" className="w-full h-full object-cover" />
+                                        <img src={getImageUrl(data.comparison.before_image.image_url)}  alt="Before" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="p-3 bg-gray-50 rounded-xl">
                                         <p className="text-sm font-medium capitalize">{data.comparison.before_image.prediction}</p>
@@ -403,7 +505,7 @@ const DetectPage: React.FC = () => {
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-gray-500 uppercase">After</p>
                                     <div className="aspect-square rounded-xl overflow-hidden border-2 border-gray-200">
-                                        <img src={`${BACKEND_URL}${data.comparison.after_image.image_url}`} alt="After" className="w-full h-full object-cover" />
+                                        <img  src={getImageUrl(data.comparison.after_image.image_url)}  alt="After" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="p-3 bg-gray-50 rounded-xl">
                                         <p className="text-sm font-medium capitalize">{data.comparison.after_image.prediction}</p>
@@ -485,6 +587,18 @@ const DetectPage: React.FC = () => {
 
         return null;
     };
+
+            // Show loading while syncing
+    if (!backendUserId) {
+        return (
+            <div className="min-h-screen w-full bg-[#FFF5F5] flex items-center justify-center">
+                <div className="text-center">
+                    <RefreshCw className="animate-spin mx-auto mb-4 text-pastel-pink" size={48} />
+                    <p className="text-lg font-medium text-gray-700">Initializing your session...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen w-full bg-[#FFF5F5] font-sans text-skin-text pb-24 relative overflow-x-hidden">
@@ -657,14 +771,14 @@ const DetectPage: React.FC = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 className="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100"
                             >
-                                <div className="aspect-square relative">
-                                    <img
-                                        src={`${BACKEND_URL}${img.image_url}`}
-                                        alt={`Skin ${img.image_type}`}
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                    />
-                                </div>
+                               <div className="aspect-square relative">
+                                <img
+                                    src={getImageUrl(img.image_url)}
+                                    alt={`Skin ${img.image_type}`}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                />
+                            </div>
                                 <div className="p-3">
                                     <p className="text-xs text-gray-500 mb-1">{formatDate(img.captured_at)}</p>
                                     <p className="text-sm font-semibold text-gray-800 capitalize">{img.image_type}</p>
@@ -812,7 +926,7 @@ const DetectPage: React.FC = () => {
                                             >
                                                 <div className="aspect-square relative">
                                                     <img
-                                                        src={`${BACKEND_URL}${img.image_url}`}
+                                                        src={getImageUrl(img.image_url)}
                                                         alt={`Skin ${img.image_type}`}
                                                         className="w-full h-full object-cover"
                                                     />

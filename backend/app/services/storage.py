@@ -12,7 +12,7 @@ class StorageService:
         self.base_path.mkdir(parents=True, exist_ok=True)
     
     async def save_image(self, file: UploadFile, user_id: str) -> str:
-        """Save uploaded image and return file path."""
+        """Save uploaded image and return file path with leading slash for URL access."""
         
         # Validate file type
         if not file.content_type.startswith("image/"):
@@ -28,18 +28,22 @@ class StorageService:
             while chunk := await file.read(1024 * 1024):  # 1MB chunks
                 await f.write(chunk)
         
-        return str(file_path)
+        url_path = f"/{str(file_path).replace(os.sep, '/')}"
+        print(f"🔍 DEBUG - Saving image with URL path: {url_path}")  # Debug log
+        return url_path
     
     def delete_image(self, file_path: str) -> bool:
         """Delete an image file."""
         try:
-            Path(file_path).unlink(missing_ok=True)
+            # Remove leading slash if present for filesystem operations
+            clean_path = file_path.lstrip('/')
+            Path(clean_path).unlink(missing_ok=True)
             return True
         except Exception:
             return False
         
     def get_full_path(self, relative_path: str) -> str:
         """Convert relative path to full filesystem path."""
-        return str(Path(relative_path))
-
-
+        # Remove leading slash for filesystem operations
+        clean_path = relative_path.lstrip('/')
+        return str(Path(clean_path))

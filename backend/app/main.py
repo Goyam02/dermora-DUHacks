@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI
-from app.routers import skin, mood, voice, analytics, reports
+from app.routers import skin, mood, voice, analytics, reports, user_engagement
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -41,6 +41,7 @@ app.include_router(mood.router)
 app.include_router(voice.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
+app.include_router(user_engagement.router)
 
 
 @app.get("/")

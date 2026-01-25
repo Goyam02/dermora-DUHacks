@@ -1,14 +1,19 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import BottomNav from './BottomNav';
 import { getVoicePrompt, uploadVoiceForMoodAnalysis, VoicePromptData } from '../services/api';
 import { connectToSolaceLive } from '../services/gemini';
+import { RefreshCw } from 'lucide-react';
 
 type SessionStatus = 'idle' | 'loading' | 'connected' | 'speaking' | 'processing';
 
 const SolacePage: React.FC = () => {
-    // CHANGE THIS TO YOUR USER ID - Must be a valid UUID
-    const USER_ID = "b6c7b2b1-87e2-4e0d-9c63-3b8a47a0c7fa";
+    // Clerk auth hooks
+    const { getToken, isSignedIn } = useAuth();
+    const { user } = useUser();
+    const [backendUserId, setBackendUserId] = useState<string | null>(null);
+    const syncedRef = useRef(false);
 
     // State
     const [promptData, setPromptData] = useState<VoicePromptData | null>(null);
@@ -23,12 +28,46 @@ const SolacePage: React.FC = () => {
     const audioQueueRef = useRef<AudioBuffer[]>([]);
     const isPlayingRef = useRef(false);
 
-    // Fetch mood-aware prompt on mount
+    // Sync user and get backend UUID
     useEffect(() => {
+        if (!isSignedIn || !user || syncedRef.current) return;
+
+        const syncUser = async () => {
+            try {
+                const token = await getToken();
+                const response = await fetch("http://localhost:8000/auth/sync-user", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                
+                const data = await response.json();
+                console.log("✅ Backend sync success:", data);
+                
+                if (data.uuid) {
+                    setBackendUserId(data.uuid);
+                    console.log("📝 Stored backend UUID:", data.uuid);
+                }
+                
+                syncedRef.current = true;
+            } catch (err) {
+                console.error("User sync failed:", err);
+            }
+        };
+
+        syncUser();
+    }, [isSignedIn, user, getToken]);
+
+    // Fetch mood-aware prompt when backendUserId is available
+    useEffect(() => {
+        if (!backendUserId) return;
+
         const fetchPrompt = async () => {
             setDebugMsg('Fetching mood-aware prompt...');
             try {
-                const data = await getVoicePrompt(USER_ID);
+                const token = await getToken();
+                const data = await getVoicePrompt(token, backendUserId);
                 setPromptData(data);
                 setDebugMsg(`Ready. Mood: ${data.mood_category} (${data.mood_score.toFixed(0)}/100)`);
             } catch (e: any) {
@@ -38,7 +77,7 @@ const SolacePage: React.FC = () => {
             }
         };
         fetchPrompt();
-    }, []);
+    }, [backendUserId, getToken]);
 
     // Audio playback queue
     const playAudio = async (ctx: AudioContext, buffer: AudioBuffer) => {
@@ -185,7 +224,7 @@ const SolacePage: React.FC = () => {
 
     // End voice session and analyze mood
     const endSession = async () => {
-        if (!sessionRef.current) return;
+        if (!sessionRef.current || !backendUserId) return;
 
         setStatus('loading');
         setDebugMsg('Ending session and analyzing mood...');
@@ -200,7 +239,8 @@ const SolacePage: React.FC = () => {
 
             // Upload for mood analysis
             setDebugMsg('Uploading conversation for mood analysis...');
-            const moodResult = await uploadVoiceForMoodAnalysis(USER_ID, audioBlob);
+            const token = await getToken();
+            const moodResult = await uploadVoiceForMoodAnalysis(audioBlob, token, backendUserId);
 
             setDebugMsg(`Session complete! Mood: ${moodResult.mood_score.toFixed(0)}/100`);
             setStatus('idle');
@@ -240,6 +280,18 @@ const SolacePage: React.FC = () => {
         return 'End Session';
     };
 
+    // Show loading while syncing
+    if (!backendUserId) {
+        return (
+            <div className="min-h-screen w-full bg-gradient-to-br from-[#FFF0F0] via-[#FDF5E6] to-[#F8F9FF] flex items-center justify-center">
+                <div className="text-center">
+                    <RefreshCw className="animate-spin mx-auto mb-4 text-purple-500" size={48} />
+                    <p className="text-lg font-medium text-gray-700">Initializing your session...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-[#FFF0F0] via-[#FDF5E6] to-[#F8F9FF] font-sans pb-24 relative overflow-hidden flex flex-col items-center justify-center">
 
@@ -247,6 +299,7 @@ const SolacePage: React.FC = () => {
             <div className="absolute top-4 left-4 bg-black/80 text-green-400 p-3 text-xs rounded z-50 font-mono max-w-[280px]">
                 <p className="font-bold mb-1">Solace Debug</p>
                 <p>Status: {status}</p>
+                <p>User: {user?.firstName || 'Loading...'}</p>
                 <p>Mood: {promptData?.mood_category || 'loading...'}</p>
                 <p>Score: {promptData?.mood_score.toFixed(0) || '...'}/100</p>
                 <p className="mt-2 text-yellow-300">{debugMsg}</p>

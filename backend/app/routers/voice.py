@@ -1,14 +1,20 @@
+# voice.py
+# Updated for Clerk authentication: Uses get_current_user dependency
+# Removed {user_id} from paths – derives from token via X-User-Id header
+# Matches skin.py, reports.py, and mood.py structure
+
 import os
 import uuid
 import shutil
 import tempfile
-from fastapi import File, UploadFile
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import File, UploadFile, APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from uuid import UUID
 from datetime import datetime
 
 from app.core.database import get_db
+from app.entities.user import User
 from app.services.voice_prompt_selector import VoicePromptSelector
 from app.services.mood_inference_service import MoodInferenceService
 from app.utils.llm_client import LLMClient
@@ -17,7 +23,39 @@ router = APIRouter(prefix="/voice", tags=["Voice Agent"])
 prompt_selector = VoicePromptSelector()
 
 
+# ============================================================================
+# 🔐 UUID USER DEPENDENCY (MATCHING skin.py)
+# ============================================================================
+
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(..., alias="X-User-Id"),
+) -> User:
+    """
+    Extract UUID from header and fetch user.
+    """
+    try:
+        user_uuid = UUID(x_user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user UUID")
+
+    result = await db.execute(
+        select(User).where(User.id == user_uuid)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(401, "User does not exist")
+
+    return user
+
+
+# ============================================================================
+# HELPER FUNCTION
+# ============================================================================
+
 def _save_temp_audio(file: UploadFile) -> str:
+    """Save uploaded audio to temporary file."""
     suffix = os.path.splitext(file.filename)[-1] or ".wav"
     filename = f"{uuid.uuid4()}{suffix}"
 
@@ -30,15 +68,17 @@ def _save_temp_audio(file: UploadFile) -> str:
     return path
 
 
-@router.get("/prompt/{user_id}")
+# ============================================================================
+# ENDPOINT 1: GET VOICE PROMPT (AUTHENTICATED)
+# ============================================================================
+
+@router.get("/prompt")
 async def get_voice_prompt(
-    user_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
-    Get appropriate system prompt for Gemini voice agent based on user's mood.
-    
-    - **user_id**: User UUID
+    Get appropriate system prompt for Gemini voice agent based on authenticated user's mood.
     
     Returns:
     - mood_category: Current mood classification
@@ -54,7 +94,7 @@ async def get_voice_prompt(
     """
     
     try:
-        prompt_data = await prompt_selector.get_prompt_for_user(db, user_id)
+        prompt_data = await prompt_selector.get_prompt_for_user(db, user.id)
         return prompt_data
     except Exception as e:
         # Fallback to neutral mood if database is unavailable
@@ -73,6 +113,10 @@ async def get_voice_prompt(
         }
 
 
+# ============================================================================
+# ENDPOINT 2: PREVIEW PROMPT BY SCORE (PUBLIC - NO AUTH)
+# ============================================================================
+
 @router.get("/prompt-preview/{mood_score}")
 async def preview_prompt_by_score(
     mood_score: float
@@ -82,6 +126,8 @@ async def preview_prompt_by_score(
     Useful for testing and understanding the system.
     
     - **mood_score**: Mood score between 0-100
+    
+    This is a public endpoint for demonstration purposes.
     """
     
     if not 0 <= mood_score <= 100:
@@ -100,11 +146,17 @@ async def preview_prompt_by_score(
     }
 
 
+# ============================================================================
+# ENDPOINT 3: GET MOOD CATEGORIES (PUBLIC - NO AUTH)
+# ============================================================================
+
 @router.get("/mood-categories")
 async def get_mood_categories():
     """
     Get all available mood categories and their thresholds.
     Useful for understanding the prompt selection logic.
+    
+    This is a public endpoint for documentation purposes.
     """
     
     return {
@@ -149,17 +201,24 @@ async def get_mood_categories():
         "thresholds": VoicePromptSelector.MOOD_THRESHOLDS
     }
 
+
+# ============================================================================
+# ENDPOINT 4: ANALYZE VOICE MOOD (AUTHENTICATED)
+# ============================================================================
+
 @router.post("/mood/analyze")
 async def analyze_voice_mood(
-    user_id: UUID,
     audio: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
-    Analyze a completed voice conversation and store mood.
+    Analyze a completed voice conversation and store mood for authenticated user.
 
     Flow:
     audio → STT → LLM mood inference → MoodLog
+    
+    The user is automatically derived from the X-User-Id header.
     """
 
     if not audio.content_type or not audio.content_type.startswith("audio/"):
@@ -176,7 +235,7 @@ async def analyze_voice_mood(
 
         mood_log = await mood_service.process_conversation_audio(
             db=db,
-            user_id=user_id,
+            user_id=user.id,  # ✅ Uses authenticated user's UUID
             audio_path=temp_path,
         )
 
@@ -187,21 +246,47 @@ async def analyze_voice_mood(
             )
 
         return {
+            "mood_log_id": str(mood_log.id),
+            "user_id": str(user.id),
             "mood_score": mood_log.mood_score,
             "stress": mood_log.stress,
             "anxiety": mood_log.anxiety,
             "sadness": mood_log.sadness,
             "energy": mood_log.energy,
-            "logged_at": mood_log.logged_at,
+            "logged_at": mood_log.logged_at.isoformat(),
+            "message": "Voice mood analysis complete"
         }
 
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Mood analysis failed: {str(e)}"
+        )
+    
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
+
 # ============================================================================
-# FRONTEND INTEGRATION EXAMPLE (React Native)
+# FRONTEND INTEGRATION NOTES
 # ============================================================================
+"""
+Frontend Usage (React/React Native):
 
+1. Get voice prompt before starting session:
+   ```typescript
+   const token = await getToken();
+   const prompt = await getVoicePrompt(token, userId);
+   // Use prompt.system_prompt in Gemini Live API config
+   ```
 
+2. After voice session completes, analyze mood:
+   ```typescript
+   const token = await getToken();
+   const audioBlob = await recorder.stop();
+   const result = await uploadVoiceForMoodAnalysis(audioBlob, token, userId);
+   ```
 
+All endpoints now require X-User-Id header (except public preview endpoints).
+"""
