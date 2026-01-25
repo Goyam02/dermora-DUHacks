@@ -327,7 +327,7 @@ const DetectPage: React.FC = () => {
 
             <div className="px-6 space-y-6">
                 {/* Camera/Image Section */}
-                <div className="relative w-full aspect-[3/4] bg-black rounded-3xl overflow-hidden shadow-xl border-4 border-white">
+                <div className="relative w-70px bg-white rounded-3xl overflow-hidden shadow-xl border-4 border-white">
                     <AnimatePresence>
                         {!imageSrc ? (
                             <motion.div
@@ -341,14 +341,14 @@ const DetectPage: React.FC = () => {
                                     ref={webcamRef}
                                     screenshotFormat="image/jpeg"
                                     videoConstraints={{ facingMode: "user" }}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-80px object-contain"
                                 />
-                                <div className="absolute bottom-6 w-full flex justify-center gap-6 z-10">
+                                <div className="absolute bottom-6 w-full flex justify-center gap-2 z-10">
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
                                         className="p-4 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/40 transition-all"
                                     >
-                                        <Upload size={24} />
+                                        <Upload size={20} />
                                         <input
                                             type="file"
                                             ref={fileInputRef}
@@ -359,9 +359,9 @@ const DetectPage: React.FC = () => {
                                     </button>
                                     <button
                                         onClick={capture}
-                                        className="w-16 h-16 bg-white rounded-full border-4 border-gray-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                                        className="w-12 h-12 bg-white rounded-full border-4 border-gray-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
                                     >
-                                        <div className="w-14 h-14 bg-red-500 rounded-full border-2 border-white" />
+                                        <div className="w-10 h-10 bg-red-500 rounded-full border-2 border-white" />
                                     </button>
                                 </div>
                             </motion.div>
