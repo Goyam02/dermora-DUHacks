@@ -1,6 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import Webcam from 'react-webcam';
+import { Capacitor } from '@capacitor/core';
+import {
+    Camera as CapCamera,
+    CameraResultType,
+    CameraSource,
+    CameraDirection
+  } from '@capacitor/camera';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Camera, Upload, RefreshCw, AlertCircle, CheckCircle, FileText, X, 
@@ -14,7 +22,9 @@ import {
     analyzeExisting, compareImages, deleteImage, refreshImprovement, getMySkinImages 
 } from '../services/api';
 
-const BACKEND_URL = "http://localhost:8000";
+const isNative = Capacitor.isNativePlatform();
+// const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "https://continually-removing-delayed-program.trycloudflare.com";
 
 interface SkinImage {
     image_id: string;
@@ -114,19 +124,65 @@ const DetectPage: React.FC = () => {
         }
     }, [isAuthReady, backendUserId, getToken, fetchUserImages]);
 
-    const capture = useCallback(() => {
-        if (!isAuthReady) return;  // ← ADD THIS LINE
-        const imageSrc = webcamRef.current?.getScreenshot();
-        if (imageSrc) {
+    // const capture = useCallback(() => {
+    //     if (!isAuthReady) return;  // ← ADD THIS LINE
+    //     const imageSrc = webcamRef.current?.getScreenshot();
+    //     if (imageSrc) {
+    //         setImageSrc(imageSrc);
+    //         fetch(imageSrc)
+    //             .then(res => res.blob())
+    //             .then(blob => {
+    //                 const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+    //                 handleAnalysis(file);
+    //             });
+    //     }
+    // }, [webcamRef, isAuthReady]);
+    const capture = async () => {
+        if (!isAuthReady) return;
+      
+        try {
+          if (isNative) {
+            // 📱 ANDROID / IOS
+            const photo = await CapCamera.getPhoto({
+                quality: 90,
+                resultType: CameraResultType.Base64,
+                source: CameraSource.Camera,
+                direction: CameraDirection.Front,
+              });
+              
+              
+      
+            const base64 = photo.base64String!;
+            const blob = await (
+              await fetch(`data:image/jpeg;base64,${base64}`)
+            ).blob();
+      
+            const file = new File([blob], "mobile_capture.jpg", {
+              type: "image/jpeg",
+            });
+      
+            setImageSrc(`data:image/jpeg;base64,${base64}`);
+            handleAnalysis(file);
+      
+          } else {
+            // 💻 WEB
+            const imageSrc = webcamRef.current?.getScreenshot();
+            if (!imageSrc) return;
+      
+            const blob = await (await fetch(imageSrc)).blob();
+            const file = new File([blob], "web_capture.jpg", {
+              type: "image/jpeg",
+            });
+      
             setImageSrc(imageSrc);
-            fetch(imageSrc)
-                .then(res => res.blob())
-                .then(blob => {
-                    const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-                    handleAnalysis(file);
-                });
+            handleAnalysis(file);
+          }
+        } catch (err) {
+          console.error("Camera error", err);
+          setError("Camera access failed");
         }
-    }, [webcamRef, isAuthReady]);
+      };
+      
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         
@@ -329,6 +385,7 @@ const DetectPage: React.FC = () => {
         if (trend === 'worsening') return 'bg-gradient-to-br from-red-50 to-red-100 border-red-200 text-red-700';
         return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 text-gray-700';
     };
+    
 
     /* ================= SYNC USER ================= */
 useEffect(() => {
@@ -337,7 +394,7 @@ useEffect(() => {
   const syncUser = async () => {
     try {
       const token = await getToken();
-      const res = await fetch("http://localhost:8000/auth/sync-user", {
+      const res = await fetch("https://continually-removing-delayed-program.trycloudflare.com/auth/sync-user", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -437,7 +494,7 @@ useEffect(() => {
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="relative w-full bg-black rounded-3xl overflow-hidden shadow-2xl border-4 border-white"
+                    className="relative w-full h-[420px] bg-black rounded-3xl overflow-hidden shadow-2xl border-4 border-white"
                 >
                     <AnimatePresence mode="wait">
                         {!imageSrc ? (
@@ -448,13 +505,39 @@ useEffect(() => {
                                 exit={{ opacity: 0 }}
                                 className="w-full h-full relative"
                             >
-                                <Webcam
+                                {/* <Webcam
                                     audio={false}
                                     ref={webcamRef}
                                     screenshotFormat="image/jpeg"
                                     videoConstraints={{ facingMode: "user" }}
                                     className="w-full h-full object-cover"
-                                />
+                                /> */}
+{!imageSrc && (
+  <>
+    {/* WEB LIVE CAMERA */}
+    {!isNative && (
+      <Webcam
+        audio={false}
+        ref={webcamRef}
+        screenshotFormat="image/jpeg"
+        videoConstraints={{ facingMode: "user" }}
+        className="w-full h-full object-cover"
+      />
+    )}
+
+    {/* ANDROID / IOS CAMERA PLACEHOLDER */}
+    {isNative && (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white">
+        <Camera size={64} className="mb-4 opacity-80" />
+        <p className="text-sm opacity-70">
+          Tap the shutter button to open camera
+        </p>
+      </div>
+    )}
+  </>
+)}
+
+
                                 {/* Camera Controls */}
                                 <div className="absolute bottom-8 w-full flex justify-center items-center gap-6 z-10 px-6">
                                     {/* Upload Button */}

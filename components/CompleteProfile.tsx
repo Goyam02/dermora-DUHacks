@@ -29,7 +29,7 @@ const CompleteProfile: React.FC = () => {
 
         try {
             // Call backend API
-            const response = await axios.post('http://localhost:8000/auth/register', formData);
+            const response = await axios.post('https://continually-removing-delayed-program.trycloudflare.com/auth/register', formData);
             if (response.status === 200) {
                 // Store user info if needed
                 navigate('/home');
