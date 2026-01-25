@@ -199,7 +199,7 @@ const Home: React.FC = () => {
                 const token = await getToken();
                 
                 // Fetch dashboard data
-                const dashboardResponse = await fetch('http://localhost:8000/engagement/dashboard', {
+                const dashboardResponse = await fetch('https://continually-removing-delayed-program.trycloudflare.com/engagement/dashboard', {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'X-User-Id': backendUserId
@@ -213,7 +213,7 @@ const Home: React.FC = () => {
                 const dashboard = await dashboardResponse.json();
                 
                 // Fetch daily insight
-                const insightResponse = await fetch('http://localhost:8000/engagement/insights/daily', {
+                const insightResponse = await fetch('https://continually-removing-delayed-program.trycloudflare.com/engagement/insights/daily', {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'X-User-Id': backendUserId
@@ -246,7 +246,7 @@ const Home: React.FC = () => {
             setCheckingIn(true);
             const token = await getToken();
             
-            const response = await fetch('http://localhost:8000/engagement/check-in', {
+            const response = await fetch('https://continually-removing-delayed-program.trycloudflare.com/engagement/check-in', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -261,7 +261,7 @@ const Home: React.FC = () => {
             const result: CheckInResponse = await response.json();
             
             // Refresh dashboard to get updated streak
-            const dashboardResponse = await fetch('http://localhost:8000/engagement/dashboard', {
+            const dashboardResponse = await fetch('https://continually-removing-delayed-program.trycloudflare.com/engagement/dashboard', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'X-User-Id': backendUserId

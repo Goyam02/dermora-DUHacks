@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
 // Base config (shared)
-const BASE_URL = 'http://localhost:8000';
+const BASE_URL = 'https://continually-removing-delayed-program.trycloudflare.com';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Factory to create auth-aware axios instance with X-User-Id header

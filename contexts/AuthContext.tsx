@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setIsLoading(true);
                 const token = await getToken();
                 
-                const response = await fetch("http://localhost:8000/auth/sync-user", {
+                const response = await fetch("https://continually-removing-delayed-program.trycloudflare.com/auth/sync-user", {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
                 });
